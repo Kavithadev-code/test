@@ -1,0 +1,39 @@
+from src.app.app import create_app
+from utils.db_util import db_session_scope
+
+from repositories.madrid.madrid_event_repository import MadridEventRepository
+from repositories.assignment.assignment_repository import AssignmentRepository
+from service.madrid.trademark_client import TrademarkClient
+from service.madrid.madrid_event_processor import MadridEventProcessor
+from service.madrid_batch_runner.madrid_batch_runner import MadridBatchRunner
+
+def main():
+    app = create_app()
+
+    with app.app_context():
+        with db_session_scope() as session:
+            madrid_repo = MadridEventRepository(session)
+            assignment_repo = AssignmentRepository(session)
+
+            trm_client = TrademarkClient(
+                base_url=TRADEMARK_URL,
+                serial_suffix=TRADEMARK_URL_SERIAL_NO,
+                cert_path=CERT_PATH,
+            )
+
+            processor = MadridEventProcessor(
+                trademark_client=trm_client,
+                assignment_repo=assignment_repo,
+                logger=logger,
+            )
+
+            runner = MadridBatchRunner(
+                assignment_repo=assignment_repo,
+                processor=processor,
+                logger=logger,
+            )
+
+            runner.run_once()
+
+if __name__ == "__main__":
+    main()
