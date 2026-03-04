@@ -1,0 +1,59 @@
+from utils.db_util import SessionLocal
+from src.app.app import create_app  # adjust if your create_app import is different
+
+# import your real classes (instances will be created below)
+from repositories.madrid.madrid_event_repository import MadridEventRepository
+from repositories.assignment.assignment_repository import AssignmentRepository
+from service.madrid.trademark_client import TrademarkClient
+from service.madrid.madrid_event_processor import MadridEventProcessor
+from service.madrid_batch_runner.madrid_batch_runner import MadridBatchRunner
+
+# wherever your constants live
+from utils.constants import TRADEMARK_URL, TRADEMARK_URL_SERIAL_NO, CERT_PATH
+from utils.logger import logger  # adjust
+
+
+def main():
+    app = create_app()
+
+    with app.app_context():
+        session = SessionLocal()   # ✅ REAL SQLAlchemy session (has execute/rollback)
+
+        try:
+            # ✅ create repo instances using the real session
+            madrid_repo = MadridEventRepository(session)
+            assignment_repo = AssignmentRepository(session)
+
+            # ✅ create client instance
+            trm_client = TrademarkClient(
+                base_url=TRADEMARK_URL,
+                serial_suffix=TRADEMARK_URL_SERIAL_NO,
+                cert_path=CERT_PATH,
+            )
+
+            # ✅ create processor instance
+            processor = MadridEventProcessor(
+                trademark_client=trm_client,
+                assignment_repo=assignment_repo,
+                logger=logger,
+            )
+
+            # ✅ create runner instance (processes ONE assignment)
+            runner = MadridBatchRunner(
+                assignment_repo=assignment_repo,
+                processor=processor,
+                logger=logger,
+            )
+
+            runner.run_once()
+
+        except Exception:
+            # safety rollback in case something failed before repo handled it
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+
+if __name__ == "__main__":
+    main()
