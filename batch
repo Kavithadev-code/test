@@ -1,11 +1,1 @@
-def save_conveying_party(self, owner, assignment_id: int):
-    conveying_party = ConveyingParty()
 
-    conveying_party.fk_assignment_id = assignment_id
-    conveying_party.name = owner.name
-    conveying_party.party_code = owner.party_code
-    conveying_party.legal_entity = owner.legal_entity
-
-    self.session.add(conveying_party)
-    self.session.commit()
-    return conveying_party
