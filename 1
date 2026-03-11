@@ -1,5 +1,11 @@
-self._conveying_party_service.save_conveying_parties(
-    conveying_party_data=conveying_parties,
-    assignment_id=assignment.assignment_id,
-    type_id=fk_assignment_type_id
-)
+address_id = self._save_receiving_party_address(owner)
+        domestic_individual_id = self._save_domestic_individual(owner)
+        domestic_address_info_id = self._save_domestic_address_info(owner)
+
+        self._receiving_party_service.save_receiving_party(
+            receiving_party_data=receiving_party_data,
+            type_id=fk_assignment_type_id,
+            address_id=address_id,
+            domestic_individual_id=domestic_individual_id,
+            domestic_address_info_id=domestic_address_info_id,
+        )
