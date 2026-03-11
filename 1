@@ -1,1 +1,18 @@
 
+def save_mailing_address(self, mailing_address, conveying_party_id: int):
+    address = ConveyingPartyAddress()
+
+    address.fk_conveying_party_id = conveying_party_id
+    address.name_line_one = mailing_address.name_line_one
+    address.name_line_two = mailing_address.name_line_two
+    address.street_line_one = mailing_address.street_line_one
+    address.street_line_two = mailing_address.street_line_two
+    address.city = mailing_address.city_name
+    address.state = mailing_address.state_geo_code
+    address.postal_code = mailing_address.postal_code
+    address.country_code = mailing_address.country_code
+    address.country_name = mailing_address.country_name
+
+    self.session.add(address)
+    self.session.commit()
+    return address
