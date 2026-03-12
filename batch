@@ -1,10 +1,21 @@
-def save_conveying_party(self, conveying_parties, assignment_id):
-    for owner in conveying_parties:
+# save receiving parties
+self.save_receiving_party(receiving_parties, saved_assignments.assignment_id)
+
+
+
+
+
+
+
+
+
+def save_receiving_party(self, receiving_parties, assignment_id):
+    for owner in receiving_parties:
         ip_info = owner.ip_info
         party_code = getattr(ip_info, "party_code", None)
 
         type_id = None
-        conveying_type = None
+        receiving_type = None
 
         if party_code == "I":
             first_name = getattr(ip_info, "givenName", None)
@@ -20,31 +31,59 @@ def save_conveying_party(self, conveying_parties, assignment_id):
             individual = self.individual_repo.get_individual_by_name(first_name, last_name)
             if individual:
                 type_id = individual.individual_id
-                conveying_type = "INDIVIDUAL"
+                receiving_type = "INDIVIDUAL"
 
         elif party_code == "O":
             entity_name = getattr(ip_info, "name", None)
             entity = self.entity_repo.get_entity_by_name(entity_name)
             if entity:
                 type_id = entity.entity_id
-                conveying_type = "ENTITY"
+                receiving_type = "ENTITY"
 
         if not type_id:
             continue
 
-        conveying_party_data = {
-            "conveying_party_id": None,
+        address_id = None
+        domestic_individual_id = None
+        domestic_address_info_id = None
+
+        contact_address = getattr(ip_info, "contactAddress", None)
+        mailing_addresses = getattr(contact_address, "mailingAddresses", None) if contact_address else None
+
+        if mailing_addresses:
+            mailing_address = mailing_addresses[0]
+
+            address_info = {
+                "address_id": None,
+                "address_line_1": getattr(mailing_address, "streetLineOne", None),
+                "address_line_2": getattr(mailing_address, "streetLineTwo", None),
+                "city": getattr(mailing_address, "city_name", None),
+                "state": getattr(mailing_address, "state_name", None),
+                "zip_code": getattr(mailing_address, "postcode", None),
+                "country": getattr(mailing_address, "country_name", None),
+                "lock_control_number": 1
+            }
+
+            saved_address = self.address_repo.upsert_address(address_info)
+            if saved_address:
+                address_id = saved_address.get("address_id") if isinstance(saved_address, dict) else saved_address.address_id
+
+        receiving_party_data = {
+            "receiving_party_id": None,
             "assignment_id": assignment_id,
-            "conveying_type": conveying_type,
+            "receiving_type": receiving_type,
             "execution_date": getattr(owner, "assignment_date", None),
             "citizenship": None,
-            "lock_control_number": 1,
             "citizenship_id": None,
             "citizenship_state_id": None,
             "citizenship_state": None,
+            "lock_control_number": 1
         }
 
-        self.conveying_party_repo.save_conveying_parties(
-            conveying_party_data,
-            type_id
+        self.receiving_party_repo.save_receiving_parties(
+            receiving_party_data,
+            type_id,
+            address_id,
+            domestic_individual_id,
+            domestic_address_info_id
         )
