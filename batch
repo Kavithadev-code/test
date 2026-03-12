@@ -1,1 +1,49 @@
 
+for owner in conveying_parties:
+
+    ip_info = owner.ip_info
+    party_code = getattr(ip_info, "party_code", None)
+
+    fk_individual_id = None
+    fk_entity_id = None
+
+    if party_code == "I":
+        first_name = getattr(ip_info, "givenName", None)
+        last_name = getattr(ip_info, "familyName", None)
+
+        if not first_name and not last_name:
+            name = getattr(ip_info, "name", None)
+            if name and "," in name:
+                parts = [p.strip() for p in name.split(",", 1)]
+                first_name = parts[0]
+                last_name = parts[1]
+
+        individual = self.individual_repo.get_individual_by_name(first_name, last_name)
+        if individual:
+            fk_individual_id = individual.individual_id
+
+    elif party_code == "O":
+        entity_name = getattr(ip_info, "name", None)
+        entity = self.entity_repo.get_entity_by_name(entity_name)
+        if entity:
+            fk_entity_id = entity.entity_id
+
+    conveying_party_data = {
+        "conveying_party_id": None,
+        "fk_assignment_id": saved_assignment.assignment_id,
+        "fk_individual_id": fk_individual_id,
+        "fk_entity_id": fk_entity_id,
+        "execution_date": getattr(owner, "assignment_date", None),
+        "conveying_type": getattr(owner, "owner_type_cd", None),
+        "citizenship": None,
+        "citizenship_id": None,
+        "citizenship_state_id": None,
+        "citizenship_state": None,
+        "is_merged_entity": 0,
+        "lock_control_number": 1
+    }
+
+    self.conveying_party_repo.save_conveying_parties(
+        conveying_party_data,
+        fk_assignment_type_id
+    )
