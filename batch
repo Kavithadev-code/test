@@ -1,89 +1,64 @@
-# save receiving parties
-self.save_receiving_party(receiving_parties, saved_assignments.assignment_id)
+# save correspondent
+self.save_correspondent(trademark_data, saved_assignments.assignment_id)
 
 
 
 
 
+def save_correspondent(self, trademark_data, assignment_id):
+    correspondence_info = getattr(trademark_data, "correspondence_info", None)
+    if not correspondence_info or not getattr(correspondence_info, "ip_info", None):
+        return None
 
+    ip_info = correspondence_info.ip_info
+    fk_address_id = None
+    fk_individual_id = None
 
-
-
-def save_receiving_party(self, receiving_parties, assignment_id):
-    for owner in receiving_parties:
-        ip_info = owner.ip_info
-        party_code = getattr(ip_info, "party_code", None)
-
-        type_id = None
-        receiving_type = None
-
-        if party_code == "I":
-            first_name = getattr(ip_info, "givenName", None)
-            last_name = getattr(ip_info, "familyName", None)
-
-            if not first_name and not last_name:
-                name = getattr(ip_info, "name", None)
-                if name and "," in name:
-                    parts = [p.strip() for p in name.split(",", 1)]
-                    first_name = parts[0] if len(parts) > 0 else None
-                    last_name = parts[1] if len(parts) > 1 else None
-
-            individual = self.individual_repo.get_individual_by_name(first_name, last_name)
-            if individual:
-                type_id = individual.individual_id
-                receiving_type = "INDIVIDUAL"
-
-        elif party_code == "O":
-            entity_name = getattr(ip_info, "name", None)
-            entity = self.entity_repo.get_entity_by_name(entity_name)
-            if entity:
-                type_id = entity.entity_id
-                receiving_type = "ENTITY"
-
-        if not type_id:
-            continue
-
-        address_id = None
-        domestic_individual_id = None
-        domestic_address_info_id = None
-
-        contact_address = getattr(ip_info, "contactAddress", None)
-        mailing_addresses = getattr(contact_address, "mailingAddresses", None) if contact_address else None
-
-        if mailing_addresses:
-            mailing_address = mailing_addresses[0]
-
-            address_info = {
-                "address_id": None,
-                "address_line_1": getattr(mailing_address, "streetLineOne", None),
-                "address_line_2": getattr(mailing_address, "streetLineTwo", None),
-                "city": getattr(mailing_address, "city_name", None),
-                "state": getattr(mailing_address, "state_name", None),
-                "zip_code": getattr(mailing_address, "postcode", None),
-                "country": getattr(mailing_address, "country_name", None),
-                "lock_control_number": 1
-            }
-
-            saved_address = self.address_repo.upsert_address(address_info)
-            if saved_address:
-                address_id = saved_address.get("address_id") if isinstance(saved_address, dict) else saved_address.address_id
-
-        receiving_party_data = {
-            "receiving_party_id": None,
-            "assignment_id": assignment_id,
-            "receiving_type": receiving_type,
-            "execution_date": getattr(owner, "assignment_date", None),
-            "citizenship": None,
-            "citizenship_id": None,
-            "citizenship_state_id": None,
-            "citizenship_state": None,
+    mailing_addresses = getattr(getattr(ip_info, "contactAddress", None), "mailingAddresses", None)
+    if mailing_addresses:
+        mailing_address = mailing_addresses[0]
+        saved_address = self.address_repo.upsert_address({
+            "address_id": None,
+            "address_line_1": getattr(mailing_address, "streetLineOne", None),
+            "address_line_2": getattr(mailing_address, "streetLineTwo", None),
+            "city": getattr(mailing_address, "city_name", None),
+            "state": getattr(mailing_address, "state_name", None),
+            "zip_code": getattr(mailing_address, "postcode", None),
+            "country": getattr(mailing_address, "country_name", None),
             "lock_control_number": 1
-        }
+        })
+        if saved_address:
+            fk_address_id = saved_address.get("address_id") if isinstance(saved_address, dict) else saved_address.address_id
 
-        self.receiving_party_repo.save_receiving_parties(
-            receiving_party_data,
-            type_id,
-            address_id,
-            domestic_individual_id,
-            domestic_address_info_id
-        )
+    first_name = getattr(ip_info, "givenName", None)
+    last_name = getattr(ip_info, "familyName", None)
+    if not first_name and not last_name:
+        name = getattr(ip_info, "name", None)
+        if name and "," in name:
+            parts = [p.strip() for p in name.split(",", 1)]
+            first_name = parts[0]
+            last_name = parts[1]
+
+    if first_name or last_name:
+        saved_individual = self.individual_repo.upsert_individual({
+            "individual_id": None,
+            "prefix": getattr(ip_info, "prefixName", None),
+            "first_name": first_name,
+            "middle_name": getattr(ip_info, "middleName", None),
+            "last_name": last_name,
+            "suffix": getattr(ip_info, "suffix", None),
+            "lock_control_number": 1
+        })
+        if saved_individual:
+            fk_individual_id = saved_individual.get("individual_id") if isinstance(saved_individual, dict) else saved_individual.individual_id
+
+    correspondent = Correspondent(
+        citizenship=None,
+        citizenship_id=None,
+        docket_number=getattr(correspondence_info, "docket_reference_no", None),
+        fk_assignment_id=assignment_id,
+        fk_address_id=fk_address_id,
+        fk_individual_id=fk_individual_id
+    )
+
+    return self.correspondence_repo.save_correspondence_info(correspondent)
