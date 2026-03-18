@@ -1,14 +1,84 @@
-environment = config.environment
-print("environment from config:", environment)
+import logging
 
-if not environment:
-    raise ValueError("config.environment is not set")
+from repositories.madrid.madrid_event_respository import MadridEventRepository
+from service.madrid.madrid_event_processor import MadridEventProcessor, MadridEventInput
+from models.assignment_status import AssignmentStatus
 
-if environment not in config.ENV_CONFIG:
-    raise ValueError(
-        f"Invalid environment '{environment}'. Valid values are: {list(config.ENV_CONFIG.keys())}"
-    )
+logger = logging.getLogger(__name__)
 
-SessionLocal = sessionmaker(
-    bind=get_engine(config.ENV_CONFIG[environment]["DB_USER_SECRET_ARN"])
-)
+
+class MadridBatchRunner:
+    """Claim NEW Madrid events and process them one at a time."""
+
+    def __init__(self, madrid_event_repo: MadridEventRepository, processor: MadridEventProcessor, session):
+        self.madrid_event_repo = madrid_event_repo
+        self.processor = processor
+        self.session = session
+
+    def process_madrid(self):
+        event_infos = self.madrid_event_repo.claim_pending_events()
+
+        if not event_infos:
+            logger.info("No pending Madrid events found")
+            return
+
+        if not isinstance(event_infos, list):
+            event_infos = [event_infos]
+
+        logger.info(f"Claimed {len(event_infos)} Madrid event(s) for processing")
+
+        for event_info in event_infos:
+            event_id = event_info.get("event_id")
+
+            try:
+                logger.info(f"Started processing Madrid event_id={event_id}")
+
+                madrid_input = MadridEventInput(
+                    event_id=event_info.get("event_id"),
+                    event_type=event_info.get("event_type"),
+                    serial_number=event_info.get("serial_number"),
+                )
+
+                assignment_id = self.processor.process_event(madrid_input)
+
+                if assignment_id:
+                    self.madrid_event_repo.finalize_event_status(
+                        event_id=event_id,
+                        status=AssignmentStatus.MADRID_PROCESSED,
+                        error_msg=None,
+                    )
+                    self.session.commit()
+                    logger.info(
+                        f"Madrid event succeeded for event_id={event_id}, assignment_id={assignment_id}"
+                    )
+                else:
+                    self.madrid_event_repo.finalize_event_status(
+                        event_id=event_id,
+                        status=AssignmentStatus.MADRID_FAIL,
+                        error_msg="Assignment id was not created",
+                    )
+                    self.session.commit()
+                    logger.info(f"Madrid event failed for event_id={event_id}")
+
+            except Exception as ex:
+                logger.exception(f"Madrid event processing failed for event_id={event_id}: {ex}")
+
+                try:
+                    self.session.rollback()
+                except Exception as rollback_ex:
+                    logger.exception(
+                        f"Rollback failed for event_id={event_id}: {rollback_ex}"
+                    )
+
+                try:
+                    self.madrid_event_repo.finalize_event_status(
+                        event_id=event_id,
+                        status=AssignmentStatus.MADRID_FAIL,
+                        error_msg=str(ex),
+                    )
+                    self.session.commit()
+                except Exception as finalize_ex:
+                    self.session.rollback()
+                    logger.exception(
+                        f"Failed to finalize Madrid event as FAILED for event_id={event_id}: {finalize_ex}"
+                    )
