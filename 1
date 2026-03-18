@@ -1,62 +1,14 @@
+environment = config.environment
+print("environment from config:", environment)
 
-import logging
-import os
-import sys
+if not environment:
+    raise ValueError("config.environment is not set")
 
-from config import logLevel, INDIVIDUAL_BATCH_SIZE
-from src.repositories.assignment.assignment_repository import AssignmentRepository
-from src.repositories.madrid.madrid_event_repository import MadridEventRepository
-from src.service.madrid.madrid_event_processor import MadridEventProcessor
-from src.service.madrid.madrid_batch_runner.madrid_batch_runner import MadridBatchRunner
-from utils.db_util import setup_db_session, close_session
-from service.madrid.trademark_client import TrademarkClient
+if environment not in config.ENV_CONFIG:
+    raise ValueError(
+        f"Invalid environment '{environment}'. Valid values are: {list(config.ENV_CONFIG.keys())}"
+    )
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logLevel)
-
-
-def main():
-    db_session = None
-
-    try:
-        single_batch_size = int(os.getenv(INDIVIDUAL_BATCH_SIZE, "10"))
-        logger.info(f"Started Madrid Batch with batch_size={single_batch_size}")
-
-        db_session = setup_db_session("DB_USER_SECRET_ARN")
-
-        madrid_event_repo = MadridEventRepository(db_session)
-        assignment_repo = AssignmentRepository(db_session)
-        trademark_client = TrademarkClient()
-
-        processor = MadridEventProcessor(
-            session=db_session,
-            trademark_client=trademark_client,
-            madrid_event_repo=madrid_event_repo,
-            assignment_repo=assignment_repo,
-        )
-
-        runner = MadridBatchRunner(
-            madrid_event_repo=madrid_event_repo,
-            processor=processor,
-            session=db_session,
-            batch_size=single_batch_size,
-        )
-
-        runner.process_madrid()
-
-        logger.info("Madrid batch completed successfully")
-        return 0
-
-    except Exception as ex:
-        logger.exception(f"Madrid batch failed: {ex}")
-        if db_session:
-            db_session.rollback()
-        return 1
-
-    finally:
-        if db_session:
-            close_session(db_session)
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+SessionLocal = sessionmaker(
+    bind=get_engine(config.ENV_CONFIG[environment]["DB_USER_SECRET_ARN"])
+)
