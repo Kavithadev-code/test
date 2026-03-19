@@ -1,1 +1,87 @@
+import logging
 
+from repositories.madrid.madrid_event_repository import MadridEventRepository
+from service.madrid.madrid_event_processor import MadridEventProcessor, MadridEventInput
+from models.assignment_status import AssignmentStatus
+
+logger = logging.getLogger(__name__)
+
+
+class MadridBatchRunner:
+    """Claim NEW madrid event and process it to mark FAILED or PROCESSED."""
+
+    def __init__(
+        self,
+        madrid_event_repo: MadridEventRepository,
+        processor: MadridEventProcessor,
+        session,
+    ):
+        """Method initializing Madrid service."""
+        self.madrid_event_repo = madrid_event_repo
+        self.processor = processor
+        self.session = session
+
+    def process_madrid(self):
+        event_info = self.madrid_event_repo.claim_pending_events()
+
+        if not event_info:
+            logger.info("No new events found")
+            return
+
+        if not isinstance(event_info, list):
+            event_info = [event_info]
+
+        logger.info(f"Claimed {len(event_info)} Madrid event(s) for processing")
+
+        for event in event_info:
+            if not event:
+                logger.info("Skipping empty event record")
+                continue
+
+            event_id = event.get("event_id")
+            if not event_id:
+                logger.info("Skipping event because no event_id was found")
+                continue
+
+            try:
+                logger.info(f"Started processing Madrid event_id={event_id}")
+
+                madrid_input = MadridEventInput(
+                    event_id=event_id,
+                    event_type=event.get("event_type"),
+                    serial_number=event.get("serial_number"),
+                )
+
+                assignment_id = self.processor.process_event(madrid_input)
+
+                if assignment_id:
+                    self.madrid_event_repo.finalize_event_status(
+                        event_id=event_id,
+                        status=AssignmentStatus.MADRID_PROCESSED,
+                        error_msg=None,
+                    )
+                    self.session.commit()
+                    logger.info(
+                        f"Madrid event succeeded for event_id={event_id}, assignment_id={assignment_id}"
+                    )
+                else:
+                    self.madrid_event_repo.finalize_event_status(
+                        event_id=event_id,
+                        status=AssignmentStatus.MADRID_FAIL,
+                        error_msg="Assignment id was not created",
+                    )
+                    self.session.commit()
+                    logger.info(
+                        f"Madrid event failed for event_id={event_id} because assignment_id was not created"
+                    )
+
+            except Exception as ex:
+                logger.exception(
+                    f"Madrid event processing failed for event_id={event_id}: {str(ex)}"
+                )
+                self.madrid_event_repo.finalize_event_status(
+                    event_id=event_id,
+                    status=AssignmentStatus.MADRID_FAIL,
+                    error_msg=str(ex),
+                )
+                self.session.commit()
