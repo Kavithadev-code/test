@@ -1,164 +1,27 @@
-from __future__ import annotations
-
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
-
-
-def _get(data: Optional[Dict[str, Any]], *keys: str, default=None):
-    if not isinstance(data, dict):
-        return default
-    for key in keys:
-        if key in data:
-            return data[key]
-    return default
-
-
 @dataclass
-class MailingAddress(Address):
+class AssumedName:
     unknown_fields: Dict[str, Any] = field(default_factory=dict)
 
-    format_type: Optional[str] = None
-    address_type: Optional[str] = None
-    category: Optional[str] = None
-    name_line_one: Optional[str] = None
-    name_line_two: Optional[str] = None
-    full_name: Optional[str] = None
-    organization_name: Optional[str] = None
-    street_line_one: Optional[str] = None
-    street_line_two: Optional[str] = None
-    city_name: Optional[str] = None
-    postal_code: Optional[str] = None
-    state_geo_code: Optional[str] = None
-    geographic_region_name: Optional[str] = None
-    country_code: Optional[str] = None
-    country_name: Optional[str] = None
-    free_format_address: Optional[str] = None
+    interest_party_assumed_name_id: Optional[int] = None
+    assumed_no: Optional[str] = None
+    assumed_name_type_cd: Optional[str] = None
 
     @classmethod
-    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "MailingAddress":
-        if not isinstance(data, dict):
-            return cls()
-
-        return cls(
-            global_identifier=_get(data, "globalIdentifier", "global_identifier"),
-            primary_ind=_get(data, "primaryInd", "primary_ind"),
-            unknown_fields=data,
-            format_type=_get(data, "formatType", "format_type"),
-            address_type=_get(data, "addressType", "address_type"),
-            category=_get(data, "category"),
-            name_line_one=_get(data, "nameLineOne", "name_line_one"),
-            name_line_two=_get(data, "nameLineTwo", "name_line_two"),
-            full_name=_get(data, "fullName", "full_name"),
-            organization_name=_get(data, "organizationName", "organization_name"),
-            street_line_one=_get(data, "streetLineOne", "street_line_one"),
-            street_line_two=_get(data, "streetLineTwo", "street_line_two"),
-            city_name=_get(data, "cityName", "city_name"),
-            postal_code=_get(data, "postalCode", "postal_code"),
-            state_geo_code=_get(data, "stateGeoCode", "state_geo_code", "stateGeoCd"),
-            geographic_region_name=_get(
-                data, "geographicRegionName", "geographic_region_name"
-            ),
-            country_code=_get(data, "countryCode", "country_code"),
-            country_name=_get(data, "countryName", "country_name"),
-            free_format_address=_get(
-                data, "freeFormatAddress", "free_format_address"
-            ),
-        )
-
-
-@dataclass
-class TelecomAddress(Address):
-    unknown_fields: Dict[str, Any] = field(default_factory=dict)
-
-    number: Optional[str] = None
-    submitted_number: Optional[str] = None
-    extension: Optional[str] = None
-    telecom_format_code: Optional[str] = None
-    telecom_type: Optional[str] = None
-
-    @classmethod
-    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "TelecomAddress":
-        if not isinstance(data, dict):
-            return cls()
-
-        return cls(
-            global_identifier=_get(data, "globalIdentifier", "global_identifier"),
-            primary_ind=_get(data, "primaryInd", "primary_ind"),
-            unknown_fields=data,
-            number=_get(data, "number"),
-            submitted_number=_get(data, "submittedNumber", "submitted_number"),
-            extension=_get(data, "extension"),
-            telecom_format_code=_get(
-                data, "telecomFormatCode", "telecom_format_code"
-            ),
-            telecom_type=_get(data, "telecomType", "telecom_type"),
-        )
-
-
-@dataclass
-class ContactAddress:
-    unknown_fields: Dict[str, Any] = field(default_factory=dict)
-
-    mailing_addresses: List[MailingAddress] = field(default_factory=list)
-    electronic_addresses: List[ElectronicAddress] = field(default_factory=list)
-    telecom_addresses: List[TelecomAddress] = field(default_factory=list)
-    primary_contact_method: Optional[str] = None
-
-    @classmethod
-    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "ContactAddress":
-        if not isinstance(data, dict):
-            return cls()
-
-        mailing_addresses_raw = _get(
-            data, "mailingAddresses", "mailing_addresses", default=[]
-        ) or []
-        electronic_addresses_raw = _get(
-            data, "electronicAddresses", "electronic_addresses", default=[]
-        ) or []
-        telecom_addresses_raw = _get(
-            data, "telecomAddresses", "telecom_addresses", default=[]
-        ) or []
-
-        return cls(
-            unknown_fields=data,
-            mailing_addresses=[
-                MailingAddress.from_dict(item) for item in mailing_addresses_raw
-            ],
-            electronic_addresses=[
-                ElectronicAddress.from_dict(item)
-                for item in electronic_addresses_raw
-            ],
-            telecom_addresses=[
-                TelecomAddress.from_dict(item) for item in telecom_addresses_raw
-            ],
-            primary_contact_method=_get(
-                data, "primaryContactMethod", "primary_contact_method"
-            ),
-        )
-
-
-@dataclass
-class Citizenship:
-    unknown_fields: Dict[str, Any] = field(default_factory=dict)
-
-    state_geo_code: Optional[str] = None
-    geographic_region_name: Optional[str] = None
-    country_code: Optional[str] = None
-    country_name: Optional[str] = None
-    country_role: Optional[str] = None
-
-    @classmethod
-    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "Citizenship":
+    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "AssumedName":
         if not isinstance(data, dict):
             return cls()
 
         return cls(
             unknown_fields=data,
-            state_geo_code=_get(data, "stateGeoCode", "state_geo_code", "stateCode"),
-            geographic_region_name=_get(
-                data, "geographicRegionName", "geographic_region_name"
+            interest_party_assumed_name_id=_get(
+                data,
+                "interestPartyAssumedNameId",
+                "interest_party_assumed_name_id",
             ),
-            country_code=_get(data, "countryCode", "country_code"),
-            country_name=_get(data, "countryName", "country_name"),
-            country_role=_get(data, "countryRole", "country_role"),
+            assumed_no=_get(data, "assumedNo", "assumed_no"),
+            assumed_name_type_cd=_get(
+                data,
+                "assumedNameTypeCd",
+                "assumed_name_type_cd",
+            ),
         )
