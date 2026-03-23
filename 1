@@ -1,87 +1,235 @@
-import logging
+from __future__ import annotations
 
-from repositories.madrid.madrid_event_repository import MadridEventRepository
-from service.madrid.madrid_event_processor import MadridEventProcessor, MadridEventInput
-from models.assignment_status import AssignmentStatus
-
-logger = logging.getLogger(__name__)
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
 
 
-class MadridBatchRunner:
-    """Claim NEW madrid event and process it to mark FAILED or PROCESSED."""
+def _get(data: Optional[Dict[str, Any]], *keys: str, default=None):
+    """
+    Return the first matching key from a dict.
+    Supports both camelCase and snake_case inputs.
+    """
+    if not isinstance(data, dict):
+        return default
 
-    def __init__(
-        self,
-        madrid_event_repo: MadridEventRepository,
-        processor: MadridEventProcessor,
-        session,
-    ):
-        """Method initializing Madrid service."""
-        self.madrid_event_repo = madrid_event_repo
-        self.processor = processor
-        self.session = session
+    for key in keys:
+        if key in data and data[key] is not None:
+            return data[key]
+    return default
 
-    def process_madrid(self):
-        event_info = self.madrid_event_repo.claim_pending_events()
 
-        if not event_info:
-            logger.info("No new events found")
-            return
+def _get_list(data: Optional[Dict[str, Any]], *keys: str) -> List[Any]:
+    value = _get(data, *keys, default=[])
+    return value if isinstance(value, list) else []
 
-        if not isinstance(event_info, list):
-            event_info = [event_info]
 
-        logger.info(f"Claimed {len(event_info)} Madrid event(s) for processing")
+@dataclass
+class Address:
+    global_identifier: Optional[str] = None
+    primary_ind: Optional[bool] = None
+    unknown_fields: Dict[str, Any] = field(default_factory=dict)
 
-        for event in event_info:
-            if not event:
-                logger.info("Skipping empty event record")
-                continue
+    @classmethod
+    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "Address":
+        if not isinstance(data, dict):
+            return cls()
 
-            event_id = event.get("event_id")
-            if not event_id:
-                logger.info("Skipping event because no event_id was found")
-                continue
+        return cls(
+            global_identifier=_get(data, "globalIdentifier", "global_identifier"),
+            primary_ind=_get(data, "primaryInd", "primary_ind"),
+            unknown_fields=data,
+        )
 
-            try:
-                logger.info(f"Started processing Madrid event_id={event_id}")
 
-                madrid_input = MadridEventInput(
-                    event_id=event_id,
-                    event_type=event.get("event_type"),
-                    serial_number=event.get("serial_number"),
-                )
+@dataclass
+class ElectronicAddress(Address):
+    email: Optional[str] = None
+    electronic_type: Optional[str] = None
 
-                assignment_id = self.processor.process_event(madrid_input)
+    @classmethod
+    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "ElectronicAddress":
+        if not isinstance(data, dict):
+            return cls()
 
-                if assignment_id:
-                    self.madrid_event_repo.finalize_event_status(
-                        event_id=event_id,
-                        status=AssignmentStatus.MADRID_PROCESSED,
-                        error_msg=None,
-                    )
-                    self.session.commit()
-                    logger.info(
-                        f"Madrid event succeeded for event_id={event_id}, assignment_id={assignment_id}"
-                    )
-                else:
-                    self.madrid_event_repo.finalize_event_status(
-                        event_id=event_id,
-                        status=AssignmentStatus.MADRID_FAIL,
-                        error_msg="Assignment id was not created",
-                    )
-                    self.session.commit()
-                    logger.info(
-                        f"Madrid event failed for event_id={event_id} because assignment_id was not created"
-                    )
+        return cls(
+            global_identifier=_get(data, "globalIdentifier", "global_identifier"),
+            primary_ind=_get(data, "primaryInd", "primary_ind"),
+            email=_get(data, "email"),
+            electronic_type=_get(data, "electronicType", "electronic_type"),
+            unknown_fields=data,
+        )
 
-            except Exception as ex:
-                logger.exception(
-                    f"Madrid event processing failed for event_id={event_id}: {str(ex)}"
-                )
-                self.madrid_event_repo.finalize_event_status(
-                    event_id=event_id,
-                    status=AssignmentStatus.MADRID_FAIL,
-                    error_msg=str(ex),
-                )
-                self.session.commit()
+
+@dataclass
+class MailingAddress(Address):
+    format_type: Optional[str] = None
+    address_type: Optional[str] = None
+    category: Optional[str] = None
+    name_line_one: Optional[str] = None
+    name_line_two: Optional[str] = None
+    full_name: Optional[str] = None
+    organization_name: Optional[str] = None
+    street_line_one: Optional[str] = None
+    street_line_two: Optional[str] = None
+    city_name: Optional[str] = None
+    postal_code: Optional[str] = None
+    state_province_code: Optional[str] = None
+    geographic_region_name: Optional[str] = None
+    country_code: Optional[str] = None
+    country_name: Optional[str] = None
+    free_format_address: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "MailingAddress":
+        if not isinstance(data, dict):
+            return cls()
+
+        return cls(
+            global_identifier=_get(data, "globalIdentifier", "global_identifier"),
+            primary_ind=_get(data, "primaryInd", "primary_ind"),
+            format_type=_get(data, "formatType", "format_type"),
+            address_type=_get(data, "addressType", "address_type"),
+            category=_get(data, "category"),
+            name_line_one=_get(data, "nameLineOne", "name_line_one"),
+            name_line_two=_get(data, "nameLineTwo", "name_line_two"),
+            full_name=_get(data, "fullName", "full_name"),
+            organization_name=_get(data, "organizationName", "organization_name"),
+            street_line_one=_get(data, "streetLineOne", "street_line_one"),
+            street_line_two=_get(data, "streetLineTwo", "street_line_two"),
+            city_name=_get(data, "cityName", "city_name"),
+            postal_code=_get(data, "postalCode", "postal_code"),
+            state_province_code=_get(data, "stateProvinceCode", "state_province_code"),
+            geographic_region_name=_get(data, "geographicRegionName", "geographic_region_name"),
+            country_code=_get(data, "countryCode", "country_code"),
+            country_name=_get(data, "countryName", "country_name"),
+            free_format_address=_get(data, "freeFormatAddress", "free_format_address"),
+            unknown_fields=data,
+        )
+
+
+@dataclass
+class TelecomAddress(Address):
+    number: Optional[str] = None
+    subscribed_number_type: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "TelecomAddress":
+        if not isinstance(data, dict):
+            return cls()
+
+        return cls(
+            global_identifier=_get(data, "globalIdentifier", "global_identifier"),
+            primary_ind=_get(data, "primaryInd", "primary_ind"),
+            number=_get(data, "number"),
+            subscribed_number_type=_get(
+                data,
+                "subscribedNumberType",
+                "subscribed_number_type",
+            ),
+            unknown_fields=data,
+        )
+
+
+@dataclass
+class Name:
+    given_name: Optional[str] = None
+    family_name: Optional[str] = None
+    middle_name: Optional[str] = None
+    full_name: Optional[str] = None
+    organization_name: Optional[str] = None
+    unknown_fields: Dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "Name":
+        if not isinstance(data, dict):
+            return cls()
+
+        return cls(
+            given_name=_get(data, "givenName", "given_name"),
+            family_name=_get(data, "familyName", "family_name"),
+            middle_name=_get(data, "middleName", "middle_name"),
+            full_name=_get(data, "fullName", "full_name"),
+            organization_name=_get(data, "organizationName", "organization_name"),
+            unknown_fields=data,
+        )
+
+
+@dataclass
+class Party:
+    party_code: Optional[str] = None
+    party_role_seq_no: Optional[int] = None
+    individual_name: Optional[Name] = None
+    entity_name: Optional[Name] = None
+    mailing_addresses: List[MailingAddress] = field(default_factory=list)
+    electronic_addresses: List[ElectronicAddress] = field(default_factory=list)
+    telecom_addresses: List[TelecomAddress] = field(default_factory=list)
+    unknown_fields: Dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "Party":
+        if not isinstance(data, dict):
+            return cls()
+
+        mailing_addresses = [
+            MailingAddress.from_dict(item)
+            for item in _get_list(data, "mailingAddresses", "mailing_addresses")
+        ]
+
+        electronic_addresses = [
+            ElectronicAddress.from_dict(item)
+            for item in _get_list(data, "electronicAddresses", "electronic_addresses")
+        ]
+
+        telecom_addresses = [
+            TelecomAddress.from_dict(item)
+            for item in _get_list(data, "telecomAddresses", "telecom_addresses")
+        ]
+
+        return cls(
+            party_code=_get(data, "partyCode", "party_code"),
+            party_role_seq_no=_get(data, "partyRoleSeqNo", "party_role_seq_no"),
+            individual_name=Name.from_dict(
+                _get(data, "individualName", "individual_name", default={})
+            ),
+            entity_name=Name.from_dict(
+                _get(data, "entityName", "entity_name", default={})
+            ),
+            mailing_addresses=mailing_addresses,
+            electronic_addresses=electronic_addresses,
+            telecom_addresses=telecom_addresses,
+            unknown_fields=data,
+        )
+
+
+@dataclass
+class Trademark:
+    registration_number: Optional[str] = None
+    serial_number: Optional[str] = None
+    mark_description: Optional[str] = None
+    owners: List[Party] = field(default_factory=list)
+    prior_owners: List[Party] = field(default_factory=list)
+    correspondent: Optional[Party] = None
+    unknown_fields: Dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "Trademark":
+        if not isinstance(data, dict):
+            return cls()
+
+        owners = [Party.from_dict(item) for item in _get_list(data, "owners")]
+        prior_owners = [
+            Party.from_dict(item)
+            for item in _get_list(data, "priorOwners", "prior_owners")
+        ]
+
+        correspondent_raw = _get(data, "correspondent", default=None)
+
+        return cls(
+            registration_number=_get(data, "registrationNumber", "registration_number"),
+            serial_number=_get(data, "serialNumber", "serial_number"),
+            mark_description=_get(data, "markDescription", "mark_description"),
+            owners=owners,
+            prior_owners=prior_owners,
+            correspondent=Party.from_dict(correspondent_raw) if correspondent_raw else None,
+            unknown_fields=data,
+        )
