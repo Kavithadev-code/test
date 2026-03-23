@@ -14,118 +14,151 @@ def _get(data: Optional[Dict[str, Any]], *keys: str, default=None):
 
 
 @dataclass
-class IpInfo:
+class MailingAddress(Address):
     unknown_fields: Dict[str, Any] = field(default_factory=dict)
 
-    id: Optional[str] = None
-    name: Optional[str] = None
-    party_code: Optional[str] = None
-    composed_of: Optional[str] = None
-    legal_entity: Optional[str] = None
-    legal_entity_statement_tx: Optional[str] = None
-    given_name: Optional[str] = None
-    suffix: Optional[str] = None
-    middle_name: Optional[str] = None
-    family_name: Optional[str] = None
-    prefix_name: Optional[str] = None
-    individual_minor_indicator: Optional[str] = None
-    primary_EAG_id: Optional[str] = None
-    assumed_name: Optional["AssumedName"] = None
-    contact_address: Optional["ContactAddress"] = None
-    citizenship: Optional["Citizenship"] = None
+    format_type: Optional[str] = None
+    address_type: Optional[str] = None
+    category: Optional[str] = None
+    name_line_one: Optional[str] = None
+    name_line_two: Optional[str] = None
+    full_name: Optional[str] = None
+    organization_name: Optional[str] = None
+    street_line_one: Optional[str] = None
+    street_line_two: Optional[str] = None
+    city_name: Optional[str] = None
+    postal_code: Optional[str] = None
+    state_geo_code: Optional[str] = None
+    geographic_region_name: Optional[str] = None
+    country_code: Optional[str] = None
+    country_name: Optional[str] = None
+    free_format_address: Optional[str] = None
 
     @classmethod
-    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "IpInfo":
+    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "MailingAddress":
         if not isinstance(data, dict):
             return cls()
 
         return cls(
+            global_identifier=_get(data, "globalIdentifier", "global_identifier"),
+            primary_ind=_get(data, "primaryInd", "primary_ind"),
             unknown_fields=data,
-            id=_get(data, "id"),
-            name=_get(data, "name"),
-            party_code=_get(data, "partyCode", "party_code"),
-            composed_of=_get(data, "composedOf", "composed_of"),
-            legal_entity=_get(data, "legalEntity", "legal_entity"),
-            legal_entity_statement_tx=_get(
-                data, "legalEntityStatementTx", "legal_entity_statement_tx"
+            format_type=_get(data, "formatType", "format_type"),
+            address_type=_get(data, "addressType", "address_type"),
+            category=_get(data, "category"),
+            name_line_one=_get(data, "nameLineOne", "name_line_one"),
+            name_line_two=_get(data, "nameLineTwo", "name_line_two"),
+            full_name=_get(data, "fullName", "full_name"),
+            organization_name=_get(data, "organizationName", "organization_name"),
+            street_line_one=_get(data, "streetLineOne", "street_line_one"),
+            street_line_two=_get(data, "streetLineTwo", "street_line_two"),
+            city_name=_get(data, "cityName", "city_name"),
+            postal_code=_get(data, "postalCode", "postal_code"),
+            state_geo_code=_get(data, "stateGeoCode", "state_geo_code", "stateGeoCd"),
+            geographic_region_name=_get(
+                data, "geographicRegionName", "geographic_region_name"
             ),
-            given_name=_get(data, "givenName", "given_name"),
-            suffix=_get(data, "suffix"),
-            middle_name=_get(data, "middleName", "middle_name"),
-            family_name=_get(data, "familyName", "family_name"),
-            prefix_name=_get(data, "prefixName", "prefix_name"),
-            individual_minor_indicator=_get(
-                data, "individualMinorIndicator", "individual_minor_indicator"
+            country_code=_get(data, "countryCode", "country_code"),
+            country_name=_get(data, "countryName", "country_name"),
+            free_format_address=_get(
+                data, "freeFormatAddress", "free_format_address"
             ),
-            primary_EAG_id=_get(data, "primaryEAGid", "primary_EAG_id"),
-            assumed_name=AssumedName.from_dict(_get(data, "assumedName", "assumed_name")),
-            contact_address=ContactAddress.from_dict(
-                _get(data, "contactAddress", "contact_address")
-            ),
-            citizenship=Citizenship.from_dict(_get(data, "citizenship")),
         )
 
 
 @dataclass
-class Owner:
+class TelecomAddress(Address):
     unknown_fields: Dict[str, Any] = field(default_factory=dict)
 
-    owner_sequence_no: Optional[int] = None
-    party_role_seq_no: Optional[int] = None
-    tm_party_role_id: Optional[int] = None
-    docket_reference_no: Optional[str] = None
-    email_authorized: Optional[str] = None
-    ip_info: Optional[IpInfo] = None
-    owner_type_cd: Optional[str] = None
-    reel_number: Optional[str] = None
-    frame_number: Optional[str] = None
-    assignment_name_change: Optional[str] = None
-    assignment_date: Optional[str] = None
+    number: Optional[str] = None
+    submitted_number: Optional[str] = None
+    extension: Optional[str] = None
+    telecom_format_code: Optional[str] = None
+    telecom_type: Optional[str] = None
 
     @classmethod
-    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "Owner":
+    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "TelecomAddress":
         if not isinstance(data, dict):
             return cls()
 
         return cls(
+            global_identifier=_get(data, "globalIdentifier", "global_identifier"),
+            primary_ind=_get(data, "primaryInd", "primary_ind"),
             unknown_fields=data,
-            owner_sequence_no=_get(data, "ownerSequenceNo", "owner_sequence_no"),
-            party_role_seq_no=_get(data, "partyRoleSeqNo", "party_role_seq_no"),
-            tm_party_role_id=_get(data, "tmPartyRoleId", "tm_party_role_id"),
-            docket_reference_no=_get(data, "docketReferenceNo", "docket_reference_no"),
-            email_authorized=_get(data, "emailAuthorized", "email_authorized"),
-            ip_info=IpInfo.from_dict(_get(data, "ipInfo", "ip_info")),
-            owner_type_cd=_get(data, "ownerTypeCd", "owner_type_cd"),
-            reel_number=_get(data, "reelNumber", "reel_number"),
-            frame_number=_get(data, "frameNumber", "frame_number"),
-            assignment_name_change=_get(
-                data, "assignmentNameChange", "assignment_name_change"
+            number=_get(data, "number"),
+            submitted_number=_get(data, "submittedNumber", "submitted_number"),
+            extension=_get(data, "extension"),
+            telecom_format_code=_get(
+                data, "telecomFormatCode", "telecom_format_code"
             ),
-            assignment_date=_get(data, "assignmentDate", "assignment_date"),
+            telecom_type=_get(data, "telecomType", "telecom_type"),
         )
 
 
 @dataclass
-class Trademark:
+class ContactAddress:
     unknown_fields: Dict[str, Any] = field(default_factory=dict)
 
-    prior_owners: List[Owner] = field(default_factory=list)
-    owners: List[Owner] = field(default_factory=list)
-    registration_number: Optional[int] = None
+    mailing_addresses: List[MailingAddress] = field(default_factory=list)
+    electronic_addresses: List[ElectronicAddress] = field(default_factory=list)
+    telecom_addresses: List[TelecomAddress] = field(default_factory=list)
+    primary_contact_method: Optional[str] = None
 
     @classmethod
-    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "Trademark":
+    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "ContactAddress":
         if not isinstance(data, dict):
             return cls()
 
-        prior_owners_raw = _get(data, "priorOwners", "prior_owners", default=[]) or []
-        owners_raw = _get(data, "owners", default=[]) or []
+        mailing_addresses_raw = _get(
+            data, "mailingAddresses", "mailing_addresses", default=[]
+        ) or []
+        electronic_addresses_raw = _get(
+            data, "electronicAddresses", "electronic_addresses", default=[]
+        ) or []
+        telecom_addresses_raw = _get(
+            data, "telecomAddresses", "telecom_addresses", default=[]
+        ) or []
 
         return cls(
             unknown_fields=data,
-            prior_owners=[Owner.from_dict(item) for item in prior_owners_raw],
-            owners=[Owner.from_dict(item) for item in owners_raw],
-            registration_number=_get(
-                data, "registrationNumber", "registration_number"
+            mailing_addresses=[
+                MailingAddress.from_dict(item) for item in mailing_addresses_raw
+            ],
+            electronic_addresses=[
+                ElectronicAddress.from_dict(item)
+                for item in electronic_addresses_raw
+            ],
+            telecom_addresses=[
+                TelecomAddress.from_dict(item) for item in telecom_addresses_raw
+            ],
+            primary_contact_method=_get(
+                data, "primaryContactMethod", "primary_contact_method"
             ),
+        )
+
+
+@dataclass
+class Citizenship:
+    unknown_fields: Dict[str, Any] = field(default_factory=dict)
+
+    state_geo_code: Optional[str] = None
+    geographic_region_name: Optional[str] = None
+    country_code: Optional[str] = None
+    country_name: Optional[str] = None
+    country_role: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "Citizenship":
+        if not isinstance(data, dict):
+            return cls()
+
+        return cls(
+            unknown_fields=data,
+            state_geo_code=_get(data, "stateGeoCode", "state_geo_code", "stateCode"),
+            geographic_region_name=_get(
+                data, "geographicRegionName", "geographic_region_name"
+            ),
+            country_code=_get(data, "countryCode", "country_code"),
+            country_name=_get(data, "countryName", "country_name"),
+            country_role=_get(data, "countryRole", "country_role"),
         )
