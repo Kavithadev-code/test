@@ -1,27 +1,52 @@
+from dataclasses import dataclass, field
+from typing import Any, Dict, Optional
+
+
 @dataclass
-class AssumedName:
+class Address:
     unknown_fields: Dict[str, Any] = field(default_factory=dict)
 
-    interest_party_assumed_name_id: Optional[int] = None
-    assumed_no: Optional[str] = None
-    assumed_name_type_cd: Optional[str] = None
+    global_identifier: Optional[str] = None
+    primary_ind: Optional[bool] = None
 
     @classmethod
-    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "AssumedName":
+    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "Address":
         if not isinstance(data, dict):
             return cls()
 
         return cls(
             unknown_fields=data,
-            interest_party_assumed_name_id=_get(
-                data,
-                "interestPartyAssumedNameId",
-                "interest_party_assumed_name_id",
-            ),
-            assumed_no=_get(data, "assumedNo", "assumed_no"),
-            assumed_name_type_cd=_get(
-                data,
-                "assumedNameTypeCd",
-                "assumed_name_type_cd",
-            ),
+            global_identifier=_get(data, "globalIdentifier", "global_identifier"),
+            primary_ind=_get(data, "primaryInd", "primary_ind"),
         )
+
+
+
+@dataclass
+class ElectronicAddress(Address):
+    unknown_fields: Dict[str, Any] = field(default_factory=dict)
+
+    email: Optional[str] = None
+    electronic_type: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "ElectronicAddress":
+        if not isinstance(data, dict):
+            return cls()
+
+        return cls(
+            unknown_fields=data,
+            global_identifier=_get(data, "globalIdentifier", "global_identifier"),
+            primary_ind=_get(data, "primaryInd", "primary_ind"),
+            email=_get(data, "email"),
+            electronic_type=_get(data, "electronicType", "electronic_type"),
+        )
+
+
+
+
+
+
+
+
+        
