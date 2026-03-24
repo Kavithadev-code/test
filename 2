@@ -1,1 +1,128 @@
+import pytest
+from unittest.mock import MagicMock, patch
+from sqlalchemy.exc import SQLAlchemyError
 
+from src.repositories.assignment.address_repository import AddressRepository
+from src.exceptions.database_exception import DatabaseException
+
+
+class TestAddressRepository:
+
+    def test_save_address_info_success_when_address_id_none(self):
+        session = MagicMock()
+        repo = AddressRepository(session)
+
+        address = MagicMock()
+        address.address_id = None
+
+        result = repo.save_address_info(address)
+
+        session.add.assert_called_once_with(address)
+        session.flush.assert_called_once()
+        assert result == address
+
+    def test_save_address_info_success_when_address_id_exists(self):
+        session = MagicMock()
+        repo = AddressRepository(session)
+
+        address = MagicMock()
+        address.address_id = 10
+
+        result = repo.save_address_info(address)
+
+        session.add.assert_not_called()
+        session.flush.assert_not_called()
+        assert result == address
+
+    def test_save_address_info_exception(self):
+        session = MagicMock()
+        repo = AddressRepository(session)
+
+        address = MagicMock()
+        address.address_id = None
+
+        session.add.side_effect = SQLAlchemyError("DB error")
+
+        with pytest.raises(DatabaseException):
+            repo.save_address_info(address)
+
+    @patch("src.repositories.assignment.address_repository.Address")
+    def test_get_address_info_success(self, mock_address):
+        session = MagicMock()
+        repo = AddressRepository(session)
+
+        fake_obj = MagicMock()
+        session.query.return_value.get.return_value = fake_obj
+
+        result = repo.get_address_info_by_address_id(1)
+
+        session.query.assert_called_once_with(mock_address)
+        assert result == fake_obj
+
+    @patch("src.repositories.assignment.address_repository.Address")
+    def test_get_address_info_not_found(self, mock_address):
+        session = MagicMock()
+        repo = AddressRepository(session)
+
+        session.query.return_value.get.return_value = None
+
+        result = repo.get_address_info_by_address_id(1)
+
+        assert result is None
+
+    @patch("src.repositories.assignment.address_repository.Address")
+    def test_get_address_info_exception(self, mock_address):
+        session = MagicMock()
+        repo = AddressRepository(session)
+
+        session.query.side_effect = Exception("failure")
+
+        with pytest.raises(DatabaseException):
+            repo.get_address_info_by_address_id(1)
+
+    @patch("src.repositories.assignment.address_repository.Address")
+    def test_update_address_existing(self, mock_address):
+        session = MagicMock()
+        repo = AddressRepository(session)
+
+        existing = MagicMock()
+        session.query.return_value.get.return_value = existing
+
+        data = {"address_id": 1}
+
+        result = repo.update_address(data)
+
+        existing.set_address.assert_called_once_with(data)
+        session.flush.assert_called_once()
+        assert result == existing
+
+    @patch("src.repositories.assignment.address_repository.Address")
+    def test_update_address_new(self, mock_address):
+        session = MagicMock()
+        repo = AddressRepository(session)
+
+        session.query.return_value.get.return_value = None
+
+        new_obj = MagicMock()
+        mock_address.from_dict.return_value = new_obj
+
+        repo.save_address_info = MagicMock(return_value=new_obj)
+
+        data = {"address_id": None}
+
+        result = repo.update_address(data)
+
+        mock_address.from_dict.assert_called_once_with(data)
+        repo.save_address_info.assert_called_once_with(new_obj)
+        session.flush.assert_called_once()
+        assert result == new_obj
+
+    @patch("src.repositories.assignment.address_repository.Address")
+    def test_update_address_exception(self, mock_address):
+        session = MagicMock()
+        repo = AddressRepository(session)
+
+        session.query.side_effect = SQLAlchemyError("error")
+
+        with pytest.raises(DatabaseException):
+            repo.update_address({"address_id": 1})
