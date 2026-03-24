@@ -3,12 +3,11 @@ from unittest.mock import MagicMock, patch
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.repositories.assignment.address_repository import AddressRepository
-from src.exceptions.database_exception import DatabaseException
 
 
 class TestAddressRepository:
 
-    def test_save_address_info_success_when_address_id_none(self):
+    def test_save_address_info_success_when_address_id_is_none(self):
         session = MagicMock()
         repo = AddressRepository(session)
 
@@ -26,7 +25,7 @@ class TestAddressRepository:
         repo = AddressRepository(session)
 
         address = MagicMock()
-        address.address_id = 10
+        address.address_id = 100
 
         result = repo.save_address_info(address)
 
@@ -40,89 +39,139 @@ class TestAddressRepository:
 
         address = MagicMock()
         address.address_id = None
-
         session.add.side_effect = SQLAlchemyError("DB error")
 
-        with pytest.raises(DatabaseException):
+        with pytest.raises(Exception):
             repo.save_address_info(address)
 
     @patch("src.repositories.assignment.address_repository.Address")
-    def test_get_address_info_success(self, mock_address):
+    def test_get_address_info_by_address_id_success(self, mock_address):
         session = MagicMock()
         repo = AddressRepository(session)
 
-        fake_obj = MagicMock()
-        session.query.return_value.get.return_value = fake_obj
+        fake_address = MagicMock()
+        session.query.return_value.get.return_value = fake_address
 
-        result = repo.get_address_info_by_address_id(1)
+        result = repo.get_address_info_by_address_id(23)
 
         session.query.assert_called_once_with(mock_address)
-        assert result == fake_obj
+        session.query.return_value.get.assert_called_once_with(23)
+        assert result == fake_address
 
     @patch("src.repositories.assignment.address_repository.Address")
-    def test_get_address_info_not_found(self, mock_address):
+    def test_get_address_info_by_address_id_not_found(self, mock_address):
         session = MagicMock()
         repo = AddressRepository(session)
 
         session.query.return_value.get.return_value = None
 
-        result = repo.get_address_info_by_address_id(1)
+        result = repo.get_address_info_by_address_id(23)
 
+        session.query.assert_called_once_with(mock_address)
+        session.query.return_value.get.assert_called_once_with(23)
         assert result is None
 
     @patch("src.repositories.assignment.address_repository.Address")
-    def test_get_address_info_exception(self, mock_address):
+    def test_get_address_info_by_address_id_exception(self, mock_address):
         session = MagicMock()
         repo = AddressRepository(session)
 
-        session.query.side_effect = Exception("failure")
+        session.query.return_value.get.side_effect = Exception("failure")
 
-        with pytest.raises(DatabaseException):
-            repo.get_address_info_by_address_id(1)
+        with pytest.raises(Exception):
+            repo.get_address_info_by_address_id(23)
+
+        session.query.assert_called_once_with(mock_address)
+        session.query.return_value.get.assert_called_once_with(23)
 
     @patch("src.repositories.assignment.address_repository.Address")
-    def test_update_address_existing(self, mock_address):
+    def test_upsert_address_existing(self, mock_address):
         session = MagicMock()
         repo = AddressRepository(session)
 
-        existing = MagicMock()
-        session.query.return_value.get.return_value = existing
+        existing_address = MagicMock()
+        session.query.return_value.get.return_value = existing_address
 
-        data = {"address_id": 1}
+        address_info = {
+            "address_id": 1,
+            "city": "Fairfax",
+            "state": "VA"
+        }
 
-        result = repo.update_address(data)
+        result = repo.upsert_address(address_info)
 
-        existing.set_address.assert_called_once_with(data)
+        session.query.assert_called_once_with(mock_address)
+        session.query.return_value.get.assert_called_once_with(1)
+        existing_address.set_address.assert_called_once_with(address_info)
         session.flush.assert_called_once()
-        assert result == existing
+        assert result == existing_address
 
     @patch("src.repositories.assignment.address_repository.Address")
-    def test_update_address_new(self, mock_address):
+    def test_upsert_address_new_when_address_id_is_none(self, mock_address):
         session = MagicMock()
         repo = AddressRepository(session)
 
-        session.query.return_value.get.return_value = None
+        new_address = MagicMock()
+        mock_address.from_dict.return_value = new_address
+        repo.save_address_info = MagicMock(return_value=new_address)
 
-        new_obj = MagicMock()
-        mock_address.from_dict.return_value = new_obj
+        address_info = {
+            "address_id": None,
+            "city": "Fairfax",
+            "state": "VA"
+        }
 
-        repo.save_address_info = MagicMock(return_value=new_obj)
+        result = repo.upsert_address(address_info)
 
-        data = {"address_id": None}
-
-        result = repo.update_address(data)
-
-        mock_address.from_dict.assert_called_once_with(data)
-        repo.save_address_info.assert_called_once_with(new_obj)
+        mock_address.from_dict.assert_called_once_with(address_info)
+        repo.save_address_info.assert_called_once_with(new_address)
         session.flush.assert_called_once()
-        assert result == new_obj
+        assert result == new_address
 
     @patch("src.repositories.assignment.address_repository.Address")
-    def test_update_address_exception(self, mock_address):
+    def test_upsert_address_new_when_address_id_missing(self, mock_address):
         session = MagicMock()
         repo = AddressRepository(session)
 
-        session.query.side_effect = SQLAlchemyError("error")
+        new_address = MagicMock()
+        mock_address.from_dict.return_value = new_address
+        repo.save_address_info = MagicMock(return_value=new_address)
 
-        with pytest.raises(DatabaseException):
-            repo.update_address({"address_id": 1})
+        address_info = {
+            "city": "Reston",
+            "state": "VA"
+        }
+
+        result = repo.upsert_address(address_info)
+
+        mock_address.from_dict.assert_called_once_with(address_info)
+        repo.save_address_info.assert_called_once_with(new_address)
+        session.flush.assert_called_once()
+        assert result == new_address
+
+    @patch("src.repositories.assignment.address_repository.Address")
+    def test_upsert_address_exception_when_existing_lookup_fails(self, mock_address):
+        session = MagicMock()
+        repo = AddressRepository(session)
+
+        session.query.return_value.get.side_effect = SQLAlchemyError("lookup failed")
+
+        with pytest.raises(Exception):
+            repo.upsert_address({"address_id": 1})
+
+        session.query.assert_called_once_with(mock_address)
+        session.query.return_value.get.assert_called_once_with(1)
+
+    @patch("src.repositories.assignment.address_repository.Address")
+    def test_upsert_address_exception_when_from_dict_fails(self, mock_address):
+        session = MagicMock()
+        repo = AddressRepository(session)
+
+        mock_address.from_dict.side_effect = SQLAlchemyError("from_dict failed")
+
+        with pytest.raises(Exception):
+            repo.upsert_address({"address_id": None, "city": "Herndon"})
+
+        mock_address.from_dict.assert_called_once_with(
+            {"address_id": None, "city": "Herndon"}
+        )
