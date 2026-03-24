@@ -1,4 +1,35 @@
 import pytest
+from unittest.mock import MagicMock
+
+
+@pytest.fixture
+def mock_assignment():
+    assignment = MagicMock()
+    assignment.assignment_id = 11
+    assignment.file_location = "test_file.pdf"
+    assignment.fk_assignment_type_id = 5
+    assignment.fk_assignment_conveyance_info_id = 9
+    return assignment
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import pytest
 from unittest.mock import MagicMock, patch
 from sqlalchemy.exc import SQLAlchemyError
 
