@@ -1,15 +1,21 @@
-from unittest.mock import MagicMock, patch
-
 def test_save_conveying_parties_success(mock_repo, mock_db_session):
     query_mock = MagicMock()
     mock_db_session.query.return_value = query_mock
     query_mock.filter_by.return_value.first.return_value = None
 
-    with patch("repositories.assignment.conveying_parties_repository.models.ConveyingParty") as mock_conveying_cls:
-        mock_obj = MagicMock()
-        mock_conveying_cls.return_value = mock_obj
+    fake_model = MagicMock()
 
-        mock_repo.save_conveying_parties(SAVING_INPUT_DATA)
+    with patch.object(mock_repo, "ConveyingParty", create=True, return_value=fake_model):
+        mock_repo.save_conveying_parties(SAVE_INPUT_DATA)
 
-        mock_db_session.add.assert_called_once_with(mock_obj)
-        mock_db_session.commit.assert_called_once()
+    mock_db_session.add.assert_called_once_with(fake_model)
+    mock_db_session.commit.assert_called_once()
+
+
+def test_save_conveying_parties_db_error(mock_repo, mock_db_session):
+    mock_db_session.add.side_effect = Exception("Database insertion failed")
+
+    with pytest.raises(DatabaseException):
+        mock_repo.save_conveying_parties(SAVE_INPUT_DATA)
+
+    mock_db_session.rollback.assert_called_once()
