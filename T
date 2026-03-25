@@ -1,8 +1,8 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
-from service.madrid_batch_runner import MadridBatchRunner
-import service.madrid_batch_runner as runner_module
+from service.madrid.madrid_batch_runner import MadridBatchRunner
+from utils.assignment_status import AssignmentStatus
 
 
 class TestMadridBatchRunner:
@@ -49,7 +49,7 @@ class TestMadridBatchRunner:
         }
         mock_repo.claim_pending_events.return_value = event
 
-        with patch.object(runner_module, "MadridEventInput") as mock_input_cls:
+        with patch("service.madrid.madrid_batch_runner.MadridEventInput") as mock_input_cls:
             madrid_input = MagicMock()
             mock_input_cls.return_value = madrid_input
 
@@ -63,7 +63,7 @@ class TestMadridBatchRunner:
             mock_processor.process_event.assert_called_once_with(madrid_input)
             mock_repo.finalize_event_status.assert_called_once_with(
                 event_id=101,
-                status=runner_module.AssignmentStatus.MADRID_PROCESSED,
+                status=AssignmentStatus.MADRID_PROCESSED,
                 error_msg=None,
             )
             mock_session.commit.assert_called_once()
@@ -88,7 +88,7 @@ class TestMadridBatchRunner:
             valid_event,
         ]
 
-        with patch.object(runner_module, "MadridEventInput") as mock_input_cls:
+        with patch("service.madrid.madrid_batch_runner.MadridEventInput") as mock_input_cls:
             madrid_input = MagicMock()
             mock_input_cls.return_value = madrid_input
 
@@ -102,7 +102,7 @@ class TestMadridBatchRunner:
             mock_processor.process_event.assert_called_once_with(madrid_input)
             mock_repo.finalize_event_status.assert_called_once_with(
                 event_id=202,
-                status=runner_module.AssignmentStatus.MADRID_PROCESSED,
+                status=AssignmentStatus.MADRID_PROCESSED,
                 error_msg=None,
             )
             mock_session.commit.assert_called_once()
@@ -116,11 +116,11 @@ class TestMadridBatchRunner:
             "serial_number": "SN303",
         }
         mock_repo.claim_pending_events.return_value = event
-        mock_processor.process_event.side_effect = Exception("processing failed")
 
-        with patch.object(runner_module, "MadridEventInput") as mock_input_cls:
+        with patch("service.madrid.madrid_batch_runner.MadridEventInput") as mock_input_cls:
             madrid_input = MagicMock()
             mock_input_cls.return_value = madrid_input
+            mock_processor.process_event.side_effect = Exception("processing failed")
 
             runner.process_madrid()
 
@@ -132,7 +132,7 @@ class TestMadridBatchRunner:
             mock_processor.process_event.assert_called_once_with(madrid_input)
             mock_repo.finalize_event_status.assert_called_once_with(
                 event_id=303,
-                status=runner_module.AssignmentStatus.MADRID_FAIL,
+                status=AssignmentStatus.MADRID_FAIL,
                 error_msg="processing failed",
             )
             mock_session.commit.assert_called_once()
@@ -153,16 +153,17 @@ class TestMadridBatchRunner:
 
         mock_repo.claim_pending_events.return_value = [event_1, event_2]
 
-        def process_side_effect(arg):
-            if getattr(arg, "event_id", None) == 402:
-                raise Exception("second event failed")
-
-        with patch.object(runner_module, "MadridEventInput") as mock_input_cls:
+        with patch("service.madrid.madrid_batch_runner.MadridEventInput") as mock_input_cls:
             input_1 = MagicMock()
-            input_1.event_id = 401
             input_2 = MagicMock()
-            input_2.event_id = 402
             mock_input_cls.side_effect = [input_1, input_2]
+
+            mock_processor.process_event.side_effect = [None, Exception("second event failed")]
+
+            def process_side_effect(arg):
+                if arg is input_2:
+                    raise Exception("second event failed")
+                return None
 
             mock_processor.process_event.side_effect = process_side_effect
 
@@ -171,16 +172,15 @@ class TestMadridBatchRunner:
             assert mock_input_cls.call_count == 2
             assert mock_processor.process_event.call_count == 2
 
-            assert mock_repo.finalize_event_status.call_count == 2
             mock_repo.finalize_event_status.assert_any_call(
                 event_id=401,
-                status=runner_module.AssignmentStatus.MADRID_PROCESSED,
+                status=AssignmentStatus.MADRID_PROCESSED,
                 error_msg=None,
             )
             mock_repo.finalize_event_status.assert_any_call(
                 event_id=402,
-                status=runner_module.AssignmentStatus.MADRID_FAIL,
+                status=AssignmentStatus.MADRID_FAIL,
                 error_msg="second event failed",
             )
-
+            assert mock_repo.finalize_event_status.call_count == 2
             assert mock_session.commit.call_count == 2
