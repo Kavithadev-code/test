@@ -1,38 +1,147 @@
-SAVE_INPUT_DATA = {
-    "assignment_id": 123,
-    "name": "Test Party"
-}
+import pytest
+from unittest.mock import MagicMock, patch
+from sqlalchemy.exc import SQLAlchemyError
 
-def test_save_conveying_parties_success(mock_repo, mock_db_session):
+from repositories.assignment.correspondence_repository import CorrespondenceRepository
+from exception.database_exception import DatabaseException
+
+
+@pytest.fixture
+def mock_db_session():
+    return MagicMock()
+
+
+@pytest.fixture
+def mock_repo(mock_db_session):
+    return CorrespondenceRepository(mock_db_session)
+
+
+@pytest.fixture
+def mock_correspondence():
+    obj = MagicMock()
+    obj.correspondent_id = 101
+    obj.fk_assignment_id = 123
+    return obj
+
+
+def test_get_correspondence_info_by_correspondent_id_success(mock_repo, mock_db_session, mock_correspondence):
     query_mock = MagicMock()
     mock_db_session.query.return_value = query_mock
-    query_mock.filter_by.return_value.first.return_value = None
+    query_mock.get.return_value = mock_correspondence
 
-    fake_model = MagicMock()
+    with patch("repositories.assignment.correspondence_repository.Correspondent", MagicMock()):
+        result = mock_repo.get_correspondence_info_by_correspondent_id(101)
 
-    with patch(
-        "repositories.assignment.conveying_party_repository.ConveyingParty",
-        return_value=fake_model
-    ):
-        mock_repo.save_conveying_parties(SAVE_INPUT_DATA, type_id=1)
-
-    mock_db_session.add.assert_called_once_with(fake_model)
-    mock_db_session.commit.assert_called_once()
+    assert result == mock_correspondence
+    mock_db_session.query.assert_called_once()
 
 
-def test_save_conveying_parties_db_error(mock_repo, mock_db_session):
+def test_get_correspondence_info_by_correspondent_id_returns_none(mock_repo, mock_db_session):
     query_mock = MagicMock()
     mock_db_session.query.return_value = query_mock
-    query_mock.filter_by.return_value.first.return_value = None
+    query_mock.get.return_value = None
 
-    fake_model = MagicMock()
-    mock_db_session.add.side_effect = Exception("Database insertion failed")
+    with patch("repositories.assignment.correspondence_repository.Correspondent", MagicMock()):
+        result = mock_repo.get_correspondence_info_by_correspondent_id(101)
 
-    with patch(
-        "repositories.assignment.conveying_party_repository.ConveyingParty",
-        return_value=fake_model
-    ):
-        with pytest.raises(DatabaseException):
-            mock_repo.save_conveying_parties(SAVE_INPUT_DATA, type_id=1)
+    assert result is None
+    mock_db_session.query.assert_called_once()
 
-    mock_db_session.rollback.assert_called_once()
+
+def test_get_correspondence_info_by_correspondent_id_db_error(mock_repo, mock_db_session):
+    mock_db_session.query.side_effect = Exception("db failure")
+
+    with patch("repositories.assignment.correspondence_repository.Correspondent", MagicMock()):
+        with pytest.raises(DatabaseException) as exc_info:
+            mock_repo.get_correspondence_info_by_correspondent_id(101)
+
+    assert "Unable to get Correspondent Info" in str(exc_info.value)
+
+
+def test_get_correspondence_info_by_assignment_id_success(mock_repo, mock_db_session, mock_correspondence):
+    query_mock = MagicMock()
+    filter_mock = MagicMock()
+
+    mock_db_session.query.return_value = query_mock
+    query_mock.filter.return_value = filter_mock
+    filter_mock.first.return_value = mock_correspondence
+
+    mocked_correspondent = MagicMock()
+    mocked_correspondent.fk_assignment_id = MagicMock()
+
+    with patch("repositories.assignment.correspondence_repository.Correspondent", mocked_correspondent):
+        result = mock_repo.get_correspondence_info_by_assignment_id(123)
+
+    assert result == mock_correspondence
+    mock_db_session.query.assert_called_once_with(mocked_correspondent)
+    query_mock.filter.assert_called_once()
+    filter_mock.first.assert_called_once()
+
+
+def test_get_correspondence_info_by_assignment_id_returns_none(mock_repo, mock_db_session):
+    query_mock = MagicMock()
+    filter_mock = MagicMock()
+
+    mock_db_session.query.return_value = query_mock
+    query_mock.filter.return_value = filter_mock
+    filter_mock.first.return_value = None
+
+    mocked_correspondent = MagicMock()
+    mocked_correspondent.fk_assignment_id = MagicMock()
+
+    with patch("repositories.assignment.correspondence_repository.Correspondent", mocked_correspondent):
+        result = mock_repo.get_correspondence_info_by_assignment_id(123)
+
+    assert result is None
+    mock_db_session.query.assert_called_once_with(mocked_correspondent)
+    query_mock.filter.assert_called_once()
+    filter_mock.first.assert_called_once()
+
+
+def test_get_correspondence_info_by_assignment_id_db_error(mock_repo, mock_db_session):
+    query_mock = MagicMock()
+    mock_db_session.query.return_value = query_mock
+    query_mock.filter.side_effect = Exception("db failure")
+
+    mocked_correspondent = MagicMock()
+    mocked_correspondent.fk_assignment_id = MagicMock()
+
+    with patch("repositories.assignment.correspondence_repository.Correspondent", mocked_correspondent):
+        with pytest.raises(DatabaseException) as exc_info:
+            mock_repo.get_correspondence_info_by_assignment_id(123)
+
+    assert "Unable to get Correspondent Info" in str(exc_info.value)
+
+
+def test_save_correspondence_info_success_when_correspondent_id_is_none(mock_repo, mock_db_session):
+    correspondence = MagicMock()
+    correspondence.correspondent_id = None
+
+    result = mock_repo.save_correspondence_info(correspondence)
+
+    assert result == correspondence
+    mock_db_session.add.assert_called_once_with(correspondence)
+    mock_db_session.flush.assert_called_once()
+
+
+def test_save_correspondence_info_success_when_correspondent_id_exists(mock_repo, mock_db_session):
+    correspondence = MagicMock()
+    correspondence.correspondent_id = 999
+
+    result = mock_repo.save_correspondence_info(correspondence)
+
+    assert result == correspondence
+    mock_db_session.add.assert_not_called()
+    mock_db_session.flush.assert_not_called()
+
+
+def test_save_correspondence_info_sqlalchemy_error(mock_repo, mock_db_session):
+    correspondence = MagicMock()
+    correspondence.correspondent_id = None
+    mock_db_session.add.side_effect = SQLAlchemyError("insert failed")
+
+    with pytest.raises(DatabaseException) as exc_info:
+        mock_repo.save_correspondence_info(correspondence)
+
+    assert "Error saving Assignment details" in str(exc_info.value)
+    mock_db_session.add.assert_called_once_with(correspondence)
