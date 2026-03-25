@@ -2,11 +2,11 @@ import pytest
 from unittest.mock import MagicMock, patch
 from sqlalchemy.exc import SQLAlchemyError
 
-from repositories.assignment.entity_repository import EntityRepository
+from repositories.assignment.individual_repository import IndividualRepository
 from exception.database_exception import DatabaseException
 
 
-class TestEntityRepository:
+class TestIndividualRepository:
 
     @pytest.fixture
     def mock_db_session(self):
@@ -14,117 +14,181 @@ class TestEntityRepository:
 
     @pytest.fixture
     def mock_repo(self, mock_db_session):
-        return EntityRepository(mock_db_session)
+        return IndividualRepository(mock_db_session)
 
     @pytest.fixture
-    def mock_entity(self):
-        entity = MagicMock()
-        entity.entity_id = None
-        return entity
+    def mock_individual(self):
+        individual = MagicMock()
+        individual.individual_id = None
+        return individual
 
-    def test_save_entity_info_success_when_entity_id_is_none(self, mock_repo, mock_db_session, mock_entity):
-        result = mock_repo.save_entity_info(mock_entity)
+    def test_save_individual_info_success_when_individual_id_is_none(
+        self, mock_repo, mock_db_session, mock_individual
+    ):
+        result = mock_repo.save_individual_info(mock_individual)
 
-        assert result == mock_entity
-        mock_db_session.add.assert_called_once_with(mock_entity)
+        assert result == mock_individual
+        mock_db_session.add.assert_called_once_with(mock_individual)
         mock_db_session.flush.assert_called_once()
-        mock_db_session.refresh.assert_called_once_with(mock_entity)
+        mock_db_session.refresh.assert_called_once_with(mock_individual)
 
-    def test_save_entity_info_success_when_entity_id_exists(self, mock_repo, mock_db_session):
-        entity = MagicMock()
-        entity.entity_id = 1001
+    def test_save_individual_info_success_when_individual_id_exists(
+        self, mock_repo, mock_db_session
+    ):
+        individual = MagicMock()
+        individual.individual_id = 101
 
-        result = mock_repo.save_entity_info(entity)
+        result = mock_repo.save_individual_info(individual)
 
-        assert result == entity
+        assert result == individual
         mock_db_session.add.assert_not_called()
         mock_db_session.flush.assert_called_once()
-        mock_db_session.refresh.assert_called_once_with(entity)
+        mock_db_session.refresh.assert_called_once_with(individual)
 
-    def test_save_entity_info_sqlalchemy_error_on_add(self, mock_repo, mock_db_session, mock_entity):
-        mock_db_session.add.side_effect = SQLAlchemyError("db failure")
-
-        with pytest.raises(DatabaseException) as exc_info:
-            mock_repo.save_entity_info(mock_entity)
-
-        mock_db_session.rollback.assert_called_once()
-        assert "error adding entity details" in str(exc_info.value).lower()
-
-    def test_save_entity_info_sqlalchemy_error_on_flush(self, mock_repo, mock_db_session, mock_entity):
-        mock_db_session.flush.side_effect = SQLAlchemyError("flush failure")
+    def test_save_individual_info_sqlalchemy_error_on_add(
+        self, mock_repo, mock_db_session, mock_individual
+    ):
+        mock_db_session.add.side_effect = SQLAlchemyError("db add failed")
 
         with pytest.raises(DatabaseException) as exc_info:
-            mock_repo.save_entity_info(mock_entity)
+            mock_repo.save_individual_info(mock_individual)
 
         mock_db_session.rollback.assert_called_once()
-        assert "error adding entity details" in str(exc_info.value).lower()
+        assert "error saving individual name details" in str(exc_info.value).lower()
 
-    def test_upsert_entity_updates_existing_entity(self, mock_repo, mock_db_session):
-        entity_data = {
-            "entity_id": 123,
-            "name": "Updated Entity"
+    def test_save_individual_info_sqlalchemy_error_on_flush(
+        self, mock_repo, mock_db_session, mock_individual
+    ):
+        mock_db_session.flush.side_effect = SQLAlchemyError("db flush failed")
+
+        with pytest.raises(DatabaseException) as exc_info:
+            mock_repo.save_individual_info(mock_individual)
+
+        mock_db_session.rollback.assert_called_once()
+        assert "error saving individual name details" in str(exc_info.value).lower()
+
+    def test_upsert_individual_updates_existing_individual(
+        self, mock_repo, mock_db_session
+    ):
+        individual_data = {
+            "individual_id": 123,
+            "first_name": "Kim",
+            "last_name": "Hwi",
         }
 
-        existing_entity = MagicMock()
+        existing_individual = MagicMock()
         query_mock = MagicMock()
+
         mock_db_session.query.return_value = query_mock
-        query_mock.get.return_value = existing_entity
+        query_mock.get.return_value = existing_individual
 
-        result = mock_repo.upsert_entity(entity_data)
+        result = mock_repo.upsert_individual(individual_data)
 
-        assert result == existing_entity
+        assert result == existing_individual
         mock_db_session.query.assert_called_once()
         query_mock.get.assert_called_once_with(123)
-        existing_entity.set_entity.assert_called_once_with(entity_data)
+        existing_individual.set_individual.assert_called_once_with(individual_data)
         mock_db_session.flush.assert_called_once()
-        mock_db_session.refresh.assert_called_once_with(existing_entity)
+        mock_db_session.refresh.assert_called_once_with(existing_individual)
 
-    def test_upsert_entity_creates_new_entity(self, mock_repo):
-        entity_data = {
-            "name": "New Entity"
+    def test_upsert_individual_creates_new_individual(
+        self, mock_repo
+    ):
+        individual_data = {
+            "first_name": "Kim",
+            "last_name": "Hwi",
         }
 
-        saved_entity = MagicMock()
+        saved_individual = MagicMock()
 
-        with patch("repositories.assignment.entity_repository.Entity") as mock_entity_cls:
-            new_entity = MagicMock()
-            mock_entity_cls.from_dict.return_value = new_entity
-            mock_repo.save_entity_info = MagicMock(return_value=saved_entity)
+        with patch("repositories.assignment.individual_repository.Individual") as mock_individual_cls:
+            new_individual = MagicMock()
+            mock_individual_cls.from_dict.return_value = new_individual
+            mock_repo.save_individual_info = MagicMock(return_value=saved_individual)
 
-            result = mock_repo.upsert_entity(entity_data)
+            result = mock_repo.upsert_individual(individual_data)
 
-        assert result == saved_entity
-        mock_entity_cls.from_dict.assert_called_once_with(entity_data)
-        mock_repo.save_entity_info.assert_called_once_with(new_entity)
+        assert result == saved_individual
+        mock_individual_cls.from_dict.assert_called_once_with(individual_data)
+        mock_repo.save_individual_info.assert_called_once_with(new_individual)
 
-    def test_upsert_entity_creates_new_entity_when_entity_id_is_none(self, mock_repo):
-        entity_data = {
-            "entity_id": None,
-            "name": "New Entity"
+    def test_upsert_individual_creates_new_individual_when_individual_id_is_none(
+        self, mock_repo
+    ):
+        individual_data = {
+            "individual_id": None,
+            "first_name": "Kim",
+            "last_name": "Hwi",
         }
 
-        saved_entity = MagicMock()
+        saved_individual = MagicMock()
 
-        with patch("repositories.assignment.entity_repository.Entity") as mock_entity_cls:
-            new_entity = MagicMock()
-            mock_entity_cls.from_dict.return_value = new_entity
-            mock_repo.save_entity_info = MagicMock(return_value=saved_entity)
+        with patch("repositories.assignment.individual_repository.Individual") as mock_individual_cls:
+            new_individual = MagicMock()
+            mock_individual_cls.from_dict.return_value = new_individual
+            mock_repo.save_individual_info = MagicMock(return_value=saved_individual)
 
-            result = mock_repo.upsert_entity(entity_data)
+            result = mock_repo.upsert_individual(individual_data)
 
-        assert result == saved_entity
-        mock_entity_cls.from_dict.assert_called_once_with(entity_data)
-        mock_repo.save_entity_info.assert_called_once_with(new_entity)
+        assert result == saved_individual
+        mock_individual_cls.from_dict.assert_called_once_with(individual_data)
+        mock_repo.save_individual_info.assert_called_once_with(new_individual)
 
-    def test_upsert_entity_exception_raises_and_rolls_back(self, mock_repo, mock_db_session):
-        entity_data = {
-            "entity_id": 123,
-            "name": "Bad Entity"
+    def test_upsert_individual_sqlalchemy_error_raises_database_exception(
+        self, mock_repo, mock_db_session
+    ):
+        individual_data = {
+            "individual_id": 123,
+            "first_name": "Bad",
+            "last_name": "Data",
         }
 
-        mock_db_session.query.side_effect = Exception("unexpected failure")
+        mock_db_session.query.side_effect = SQLAlchemyError("query failed")
 
-        with pytest.raises(Exception):
-            mock_repo.upsert_entity(entity_data)
+        with pytest.raises(DatabaseException) as exc_info:
+            mock_repo.upsert_individual(individual_data)
 
         mock_db_session.rollback.assert_called_once()
+        assert "error saving individual details" in str(exc_info.value).lower()
+
+    def test_get_individual_info_by_individual_id_success(
+        self, mock_repo, mock_db_session
+    ):
+        individual_id = 123
+        expected_individual = MagicMock()
+
+        query_mock = MagicMock()
+        mock_db_session.query.return_value = query_mock
+        query_mock.get.return_value = expected_individual
+
+        result = mock_repo.get_individual_info_by_individual_id(individual_id)
+
+        assert result == expected_individual
+        mock_db_session.query.assert_called_once()
+        query_mock.get.assert_called_once_with(individual_id)
+
+    def test_get_individual_info_by_individual_id_returns_none(
+        self, mock_repo, mock_db_session
+    ):
+        individual_id = 123
+
+        query_mock = MagicMock()
+        mock_db_session.query.return_value = query_mock
+        query_mock.get.return_value = None
+
+        result = mock_repo.get_individual_info_by_individual_id(individual_id)
+
+        assert result is None
+        mock_db_session.query.assert_called_once()
+        query_mock.get.assert_called_once_with(individual_id)
+
+    def test_get_individual_info_by_individual_id_exception_raises_database_exception(
+        self, mock_repo, mock_db_session
+    ):
+        individual_id = 123
+        mock_db_session.query.side_effect = Exception("unexpected failure")
+
+        with pytest.raises(DatabaseException) as exc_info:
+            mock_repo.get_individual_info_by_individual_id(individual_id)
+
+        assert "unable to get individual names info" in str(exc_info.value).lower()
