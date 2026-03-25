@@ -1,22 +1,15 @@
-SAVING_INPUT_DATA = {
-    "assignment_id": 123,
-    "conveying_parties": [
-        {
-            "party_code": "I",  # Individual
-            "given_name": "Kim",
-            "family_name": "Hwi",
-            "name": None,
-            "citizenship": "US",
-            "contact_address": {
-                "address_line_1": "123 Main St",
-                "city": "Fairfax",
-                "state": "VA",
-                "postal_code": "22030",
-                "country": "US",
-                "electronic_address": {
-                    "email": "kim.hwi@test.com"
-                }
-            }
-        }
-    ]
-}
+from unittest.mock import MagicMock, patch
+
+def test_save_conveying_parties_success(mock_repo, mock_db_session):
+    query_mock = MagicMock()
+    mock_db_session.query.return_value = query_mock
+    query_mock.filter_by.return_value.first.return_value = None
+
+    with patch("repositories.assignment.conveying_parties_repository.models.ConveyingParty") as mock_conveying_cls:
+        mock_obj = MagicMock()
+        mock_conveying_cls.return_value = mock_obj
+
+        mock_repo.save_conveying_parties(SAVING_INPUT_DATA)
+
+        mock_db_session.add.assert_called_once_with(mock_obj)
+        mock_db_session.commit.assert_called_once()
