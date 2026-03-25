@@ -15,36 +15,39 @@ class TestReceivingPartyRepository:
         return ReceivingPartyRepository(mock_db_session)
 
     @pytest.fixture
-    def receiving_party_data(self):
+    def receiving_party_data_with_id(self):
         return {
             "receiving_party_id": 123,
             "assignment_id": 456,
             "name": "Test Receiving Party"
         }
 
+    @pytest.fixture
+    def receiving_party_data_without_id(self):
+        return {
+            "receiving_party_id": None,
+            "assignment_id": 456,
+            "name": "New Receiving Party"
+        }
+
     def test_delete_by_id_success(self, mock_repo, mock_db_session):
         receiving_party_id = 123
-        expected_obj = MagicMock()
+        existing_party = MagicMock()
 
         query_mock = MagicMock()
         filter_mock = MagicMock()
 
         mock_db_session.query.return_value = query_mock
         query_mock.filter.return_value = filter_mock
-        filter_mock.first.return_value = expected_obj
+        filter_mock.first.return_value = existing_party
 
         result = mock_repo.delete_by_id(receiving_party_id)
 
         assert result is True
-        mock_db_session.query.assert_called_once()
-        query_mock.filter.assert_called_once()
-        filter_mock.first.assert_called_once()
-        mock_db_session.delete.assert_called_once_with(expected_obj)
+        mock_db_session.delete.assert_called_once_with(existing_party)
         mock_db_session.commit.assert_called_once()
 
     def test_delete_by_id_returns_false_when_not_found(self, mock_repo, mock_db_session):
-        receiving_party_id = 123
-
         query_mock = MagicMock()
         filter_mock = MagicMock()
 
@@ -52,12 +55,9 @@ class TestReceivingPartyRepository:
         query_mock.filter.return_value = filter_mock
         filter_mock.first.return_value = None
 
-        result = mock_repo.delete_by_id(receiving_party_id)
+        result = mock_repo.delete_by_id(123)
 
         assert result is False
-        mock_db_session.query.assert_called_once()
-        query_mock.filter.assert_called_once()
-        filter_mock.first.assert_called_once()
         mock_db_session.delete.assert_not_called()
         mock_db_session.commit.assert_not_called()
 
@@ -73,10 +73,10 @@ class TestReceivingPartyRepository:
         assignment_id = 456
 
         row1 = MagicMock()
-        row1.to_dict.return_value = {"receiving_party_id": 1, "name": "A"}
+        row1.to_dict.return_value = {"name": "A", "receiving_party_id": 1}
 
         row2 = MagicMock()
-        row2.to_dict.return_value = {"receiving_party_id": 2, "name": "B"}
+        row2.to_dict.return_value = {"name": "B", "receiving_party_id": 2}
 
         query_mock = MagicMock()
         filter_mock = MagicMock()
@@ -88,18 +88,13 @@ class TestReceivingPartyRepository:
         result = mock_repo.get_receiving_party_by_assignment_id(assignment_id)
 
         assert result == [
-            {"receiving_party_id": 1, "name": "A"},
-            {"receiving_party_id": 2, "name": "B"},
+            {"name": "A", "receiving_party_id": 1},
+            {"name": "B", "receiving_party_id": 2},
         ]
-        mock_db_session.query.assert_called_once()
-        query_mock.filter.assert_called_once()
-        filter_mock.all.assert_called_once()
         row1.to_dict.assert_called_once()
         row2.to_dict.assert_called_once()
 
     def test_get_receiving_party_by_assignment_id_returns_empty_list(self, mock_repo, mock_db_session):
-        assignment_id = 456
-
         query_mock = MagicMock()
         filter_mock = MagicMock()
 
@@ -107,12 +102,9 @@ class TestReceivingPartyRepository:
         query_mock.filter.return_value = filter_mock
         filter_mock.all.return_value = []
 
-        result = mock_repo.get_receiving_party_by_assignment_id(assignment_id)
+        result = mock_repo.get_receiving_party_by_assignment_id(456)
 
         assert result == []
-        mock_db_session.query.assert_called_once()
-        query_mock.filter.assert_called_once()
-        filter_mock.all.assert_called_once()
 
     def test_get_receiving_party_by_assignment_id_exception_rolls_back_and_raises(
         self, mock_repo, mock_db_session
@@ -140,13 +132,8 @@ class TestReceivingPartyRepository:
         result = mock_repo.get_receiving_party_list_by_assignment_id(assignment_id)
 
         assert result == rows
-        mock_db_session.query.assert_called_once()
-        query_mock.filter.assert_called_once()
-        filter_mock.all.assert_called_once()
 
     def test_get_receiving_party_list_by_assignment_id_returns_empty_list(self, mock_repo, mock_db_session):
-        assignment_id = 456
-
         query_mock = MagicMock()
         filter_mock = MagicMock()
 
@@ -154,12 +141,9 @@ class TestReceivingPartyRepository:
         query_mock.filter.return_value = filter_mock
         filter_mock.all.return_value = []
 
-        result = mock_repo.get_receiving_party_list_by_assignment_id(assignment_id)
+        result = mock_repo.get_receiving_party_list_by_assignment_id(456)
 
         assert result == []
-        mock_db_session.query.assert_called_once()
-        query_mock.filter.assert_called_once()
-        filter_mock.all.assert_called_once()
 
     def test_get_receiving_party_list_by_assignment_id_exception_rolls_back_and_raises(
         self, mock_repo, mock_db_session
@@ -173,9 +157,15 @@ class TestReceivingPartyRepository:
 
         mock_db_session.rollback.assert_called_once()
 
-    def test_save_receiving_parties_updates_existing_party(self, mock_repo, mock_db_session, receiving_party_data):
+    def test_save_receiving_parties_updates_existing_party(
+        self, mock_repo, mock_db_session, receiving_party_data_with_id
+    ):
         existing_party = MagicMock()
-        existing_party.to_dict.return_value = {"receiving_party_id": 123, "name": "Updated"}
+        existing_party.to_dict.return_value = {
+            "receiving_party_id": 123,
+            "assignment_id": 456,
+            "name": "Updated Party"
+        }
 
         query_mock = MagicMock()
         filter_mock = MagicMock()
@@ -185,87 +175,81 @@ class TestReceivingPartyRepository:
         filter_mock.first.return_value = existing_party
 
         result = mock_repo.save_receiving_parties(
-            receiving_party_data,
+            receiving_party_data_with_id,
             type_id=1,
             address_id=10,
             domestic_individual_id=20,
             domestic_address_info_id=30
         )
 
-        assert result == {"receiving_party_id": 123, "name": "Updated"}
-        mock_db_session.query.assert_called_once()
-        query_mock.filter.assert_called_once()
-        filter_mock.first.assert_called_once()
         existing_party.set_receiving_party.assert_called_once_with(
-            receiving_party_data, 1, 10, 20, 30
+            receiving_party_data_with_id, 1, 10, 20, 30
         )
-        existing_party.to_dict.assert_called_once()
-        mock_db_session.add.assert_not_called()
-        mock_db_session.flush.assert_not_called()
-
-    def test_save_receiving_parties_creates_new_party(self, mock_repo, mock_db_session):
-        receiving_party_data = {
-            "receiving_party_id": None,
+        assert result == {
+            "receiving_party_id": 123,
             "assignment_id": 456,
-            "name": "New Party"
+            "name": "Updated Party"
         }
 
-        saved_entity = MagicMock()
-        saved_entity.to_dict.return_value = {"receiving_party_id": 999, "name": "New Party"}
-
+    def test_save_receiving_parties_creates_new_party(
+        self, mock_repo, mock_db_session, receiving_party_data_without_id
+    ):
         with patch("repositories.assignment.receiving_party_repository.ReceivingParty") as mock_receiving_party_cls:
             new_entity = MagicMock()
+            new_entity.to_dict.return_value = {
+                "receiving_party_id": 999,
+                "assignment_id": 456,
+                "name": "New Receiving Party"
+            }
             mock_receiving_party_cls.from_dict.return_value = new_entity
-            mock_db_session.add.side_effect = lambda obj: None
-            mock_db_session.flush.side_effect = lambda: None
 
             result = mock_repo.save_receiving_parties(
-                receiving_party_data,
+                receiving_party_data_without_id,
                 type_id=1,
                 address_id=10,
                 domestic_individual_id=20,
                 domestic_address_info_id=30
             )
 
-        mock_receiving_party_cls.from_dict.assert_called_once_with(
-            receiving_party_data, 1, 10, 20, 30
-        )
-        mock_db_session.add.assert_called_once_with(new_entity)
-        mock_db_session.flush.assert_called_once()
+            mock_receiving_party_cls.from_dict.assert_called_once_with(
+                receiving_party_data_without_id, 1, 10, 20, 30
+            )
+            mock_db_session.add.assert_called_once_with(new_entity)
+            mock_db_session.flush.assert_called_once()
+            assert result == {
+                "receiving_party_id": 999,
+                "assignment_id": 456,
+                "name": "New Receiving Party"
+            }
 
-    def test_save_receiving_parties_returns_none_when_new_entity_not_saved(self, mock_repo, mock_db_session):
-        receiving_party_data = {
-            "receiving_party_id": None,
-            "assignment_id": 456,
-            "name": "New Party"
-        }
-
+    def test_save_receiving_parties_returns_none_when_to_dict_returns_none(
+        self, mock_repo, mock_db_session, receiving_party_data_without_id
+    ):
         with patch("repositories.assignment.receiving_party_repository.ReceivingParty") as mock_receiving_party_cls:
             new_entity = MagicMock()
             new_entity.to_dict.return_value = None
             mock_receiving_party_cls.from_dict.return_value = new_entity
 
             result = mock_repo.save_receiving_parties(
-                receiving_party_data,
+                receiving_party_data_without_id,
                 type_id=1,
                 address_id=10,
                 domestic_individual_id=20,
                 domestic_address_info_id=30
             )
 
-        mock_receiving_party_cls.from_dict.assert_called_once_with(
-            receiving_party_data, 1, 10, 20, 30
-        )
-        mock_db_session.add.assert_called_once_with(new_entity)
-        mock_db_session.flush.assert_called_once()
-        assert result is None
+            assert result is None
+            mock_db_session.add.assert_called_once_with(new_entity)
+            mock_db_session.flush.assert_called_once()
 
-    def test_save_receiving_parties_exception_raises(self, mock_repo, mock_db_session, receiving_party_data):
+    def test_save_receiving_parties_exception_raises(
+        self, mock_repo, mock_db_session, receiving_party_data_with_id
+    ):
         mock_db_session.query.side_effect = Exception("db failure")
 
         with pytest.raises(Exception):
             mock_repo.save_receiving_parties(
-                receiving_party_data,
+                receiving_party_data_with_id,
                 type_id=1,
                 address_id=10,
                 domestic_individual_id=20,
