@@ -1,186 +1,128 @@
 import pytest
-from unittest.mock import MagicMock, patch
+import requests
 
-from service.madrid.madrid_batch_runner import MadridBatchRunner
-from utils.assignment_status import AssignmentStatus
+from service.madrid.trademark_client import TrademarkClient, TrademarkApiError
 
 
-class TestMadridBatchRunner:
+class DummyResponse:
+    def __init__(self, status_code=200, content=b"", reason="OK"):
+        self.status_code = status_code
+        self.content = content
+        self.reason = reason
 
-    @pytest.fixture
-    def mock_repo(self):
-        return MagicMock()
 
-    @pytest.fixture
-    def mock_processor(self):
-        return MagicMock()
+class TestTrademarkClient:
 
     @pytest.fixture
-    def mock_session(self):
-        return MagicMock()
+    def client(self):
+        return TrademarkClient(timeout_seconds=150)
 
     @pytest.fixture
-    def runner(self, mock_repo, mock_processor, mock_session):
-        return MadridBatchRunner(
-            madrid_event_repo=mock_repo,
-            processor=mock_processor,
-            session=mock_session,
+    def mock_env_config(self, monkeypatch):
+        class DummyConfig:
+            CURRENT_ENV_CONFIG = {
+                "TRADEMARK_URL": "https://example.com/trademark/",
+                "TRADEMARK_URL_SERIAL_NO": "/serial/"
+            }
+
+        monkeypatch.setattr("service.madrid.trademark_client.config", DummyConfig)
+        monkeypatch.setattr("service.madrid.trademark_client.CERT_PATH", "/tmp/test-cert.pem")
+        return DummyConfig
+
+    def test_fetch_by_serial_success(self, client, mock_env_config, monkeypatch):
+        response = DummyResponse(
+            status_code=200,
+            content=b'{"serial_number":"12345","status":"ok"}',
+            reason="OK"
         )
 
-    def test_process_madrid_returns_when_no_events_found(
-        self, runner, mock_repo, mock_processor, mock_session
+        captured = {}
+
+        def mock_get(url, verify, timeout):
+            captured["url"] = url
+            captured["verify"] = verify
+            captured["timeout"] = timeout
+            return response
+
+        monkeypatch.setattr("service.madrid.trademark_client.requests.get", mock_get)
+
+        result = client.fetch_by_serial("12345")
+
+        assert result == '{"serial_number":"12345","status":"ok"}'
+        assert captured["url"] == "https://example.com/trademark//serial/12345"
+        assert captured["verify"] == "/tmp/test-cert.pem"
+        assert captured["timeout"] == 150
+
+    def test_fetch_by_serial_uses_custom_timeout(self, mock_env_config, monkeypatch):
+        client = TrademarkClient(timeout_seconds=30)
+
+        response = DummyResponse(
+            status_code=200,
+            content=b'{"serial_number":"99999"}',
+            reason="OK"
+        )
+
+        captured = {}
+
+        def mock_get(url, verify, timeout):
+            captured["timeout"] = timeout
+            return response
+
+        monkeypatch.setattr("service.madrid.trademark_client.requests.get", mock_get)
+
+        result = client.fetch_by_serial("99999")
+
+        assert result == '{"serial_number":"99999"}'
+        assert captured["timeout"] == 30
+
+    def test_fetch_by_serial_request_exception_raises_trademark_api_error(
+        self, client, mock_env_config, monkeypatch
     ):
-        mock_repo.claim_pending_events.return_value = None
+        def mock_get(url, verify, timeout):
+            raise requests.RequestException("connection failed")
 
-        runner.process_madrid()
+        monkeypatch.setattr("service.madrid.trademark_client.requests.get", mock_get)
 
-        mock_repo.claim_pending_events.assert_called_once()
-        mock_processor.process_event.assert_not_called()
-        mock_repo.finalize_event_status.assert_not_called()
-        mock_session.commit.assert_not_called()
+        with pytest.raises(TrademarkApiError) as exc_info:
+            client.fetch_by_serial("12345")
 
-    def test_process_madrid_processes_single_event_successfully(
-        self, runner, mock_repo, mock_processor, mock_session
+        assert "TRM request failed: connection failed" in str(exc_info.value)
+
+    def test_fetch_by_serial_non_200_status_raises_trademark_api_error(
+        self, client, mock_env_config, monkeypatch
     ):
-        event = {
-            "event_id": 101,
-            "event_type": "MADRID",
-            "serial_number": "SN123",
-        }
-        mock_repo.claim_pending_events.return_value = event
+        response = DummyResponse(
+            status_code=500,
+            content=b'{"error":"server error"}',
+            reason="Internal Server Error"
+        )
 
-        with patch("service.madrid.madrid_batch_runner.MadridEventInput") as mock_input_cls:
-            madrid_input = MagicMock()
-            mock_input_cls.return_value = madrid_input
+        def mock_get(url, verify, timeout):
+            return response
 
-            runner.process_madrid()
+        monkeypatch.setattr("service.madrid.trademark_client.requests.get", mock_get)
 
-            mock_input_cls.assert_called_once_with(
-                event_id=101,
-                event_type="MADRID",
-                serial_number="SN123",
-            )
-            mock_processor.process_event.assert_called_once_with(madrid_input)
-            mock_repo.finalize_event_status.assert_called_once_with(
-                event_id=101,
-                status=AssignmentStatus.MADRID_PROCESSED,
-                error_msg=None,
-            )
-            mock_session.commit.assert_called_once()
+        with pytest.raises(TrademarkApiError) as exc_info:
+            client.fetch_by_serial("12345")
 
-    def test_process_madrid_processes_list_and_skips_empty_and_missing_event_id(
-        self, runner, mock_repo, mock_processor, mock_session
+        assert "TRM returned 500" in str(exc_info.value)
+        assert "Internal Server Error" in str(exc_info.value)
+
+    def test_fetch_by_serial_returns_decoded_utf8_string(
+        self, client, mock_env_config, monkeypatch
     ):
-        valid_event = {
-            "event_id": 202,
-            "event_type": "MADRID",
-            "serial_number": "SN202",
-        }
-        empty_event = {}
-        missing_id_event = {
-            "event_type": "MADRID",
-            "serial_number": "SN999",
-        }
+        response = DummyResponse(
+            status_code=200,
+            content="hello trademark".encode("utf-8"),
+            reason="OK"
+        )
 
-        mock_repo.claim_pending_events.return_value = [
-            empty_event,
-            missing_id_event,
-            valid_event,
-        ]
+        def mock_get(url, verify, timeout):
+            return response
 
-        with patch("service.madrid.madrid_batch_runner.MadridEventInput") as mock_input_cls:
-            madrid_input = MagicMock()
-            mock_input_cls.return_value = madrid_input
+        monkeypatch.setattr("service.madrid.trademark_client.requests.get", mock_get)
 
-            runner.process_madrid()
+        result = client.fetch_by_serial("55555")
 
-            mock_input_cls.assert_called_once_with(
-                event_id=202,
-                event_type="MADRID",
-                serial_number="SN202",
-            )
-            mock_processor.process_event.assert_called_once_with(madrid_input)
-            mock_repo.finalize_event_status.assert_called_once_with(
-                event_id=202,
-                status=AssignmentStatus.MADRID_PROCESSED,
-                error_msg=None,
-            )
-            mock_session.commit.assert_called_once()
-
-    def test_process_madrid_marks_event_failed_when_processor_raises(
-        self, runner, mock_repo, mock_processor, mock_session
-    ):
-        event = {
-            "event_id": 303,
-            "event_type": "MADRID",
-            "serial_number": "SN303",
-        }
-        mock_repo.claim_pending_events.return_value = event
-
-        with patch("service.madrid.madrid_batch_runner.MadridEventInput") as mock_input_cls:
-            madrid_input = MagicMock()
-            mock_input_cls.return_value = madrid_input
-            mock_processor.process_event.side_effect = Exception("processing failed")
-
-            runner.process_madrid()
-
-            mock_input_cls.assert_called_once_with(
-                event_id=303,
-                event_type="MADRID",
-                serial_number="SN303",
-            )
-            mock_processor.process_event.assert_called_once_with(madrid_input)
-            mock_repo.finalize_event_status.assert_called_once_with(
-                event_id=303,
-                status=AssignmentStatus.MADRID_FAIL,
-                error_msg="processing failed",
-            )
-            mock_session.commit.assert_called_once()
-
-    def test_process_madrid_handles_mixed_success_and_failure_events(
-        self, runner, mock_repo, mock_processor, mock_session
-    ):
-        event_1 = {
-            "event_id": 401,
-            "event_type": "MADRID",
-            "serial_number": "SN401",
-        }
-        event_2 = {
-            "event_id": 402,
-            "event_type": "MADRID",
-            "serial_number": "SN402",
-        }
-
-        mock_repo.claim_pending_events.return_value = [event_1, event_2]
-
-        with patch("service.madrid.madrid_batch_runner.MadridEventInput") as mock_input_cls:
-            input_1 = MagicMock()
-            input_2 = MagicMock()
-            mock_input_cls.side_effect = [input_1, input_2]
-
-            mock_processor.process_event.side_effect = [None, Exception("second event failed")]
-
-            def process_side_effect(arg):
-                if arg is input_2:
-                    raise Exception("second event failed")
-                return None
-
-            mock_processor.process_event.side_effect = process_side_effect
-
-            runner.process_madrid()
-
-            assert mock_input_cls.call_count == 2
-            assert mock_processor.process_event.call_count == 2
-
-            mock_repo.finalize_event_status.assert_any_call(
-                event_id=401,
-                status=AssignmentStatus.MADRID_PROCESSED,
-                error_msg=None,
-            )
-            mock_repo.finalize_event_status.assert_any_call(
-                event_id=402,
-                status=AssignmentStatus.MADRID_FAIL,
-                error_msg="second event failed",
-            )
-            assert mock_repo.finalize_event_status.call_count == 2
-            assert mock_session.commit.call_count == 2
+        assert result == "hello trademark"
+        assert isinstance(result, str)
