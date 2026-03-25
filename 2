@@ -2,146 +2,129 @@ import pytest
 from unittest.mock import MagicMock, patch
 from sqlalchemy.exc import SQLAlchemyError
 
-from repositories.assignment.correspondence_repository import CorrespondenceRepository
+from repositories.assignment.entity_repository import EntityRepository
 from exception.database_exception import DatabaseException
 
 
-@pytest.fixture
-def mock_db_session():
-    return MagicMock()
+class TestEntityRepository:
 
+    @pytest.fixture
+    def mock_db_session(self):
+        return MagicMock()
 
-@pytest.fixture
-def mock_repo(mock_db_session):
-    return CorrespondenceRepository(mock_db_session)
+    @pytest.fixture
+    def mock_repo(self, mock_db_session):
+        return EntityRepository(mock_db_session)
 
+    @pytest.fixture
+    def mock_entity(self):
+        entity = MagicMock()
+        entity.entity_id = None
+        return entity
 
-@pytest.fixture
-def mock_correspondence():
-    obj = MagicMock()
-    obj.correspondent_id = 101
-    obj.fk_assignment_id = 123
-    return obj
+    def test_save_entity_info_success_when_entity_id_is_none(self, mock_repo, mock_db_session, mock_entity):
+        result = mock_repo.save_entity_info(mock_entity)
 
+        assert result == mock_entity
+        mock_db_session.add.assert_called_once_with(mock_entity)
+        mock_db_session.flush.assert_called_once()
+        mock_db_session.refresh.assert_called_once_with(mock_entity)
 
-def test_get_correspondence_info_by_correspondent_id_success(mock_repo, mock_db_session, mock_correspondence):
-    query_mock = MagicMock()
-    mock_db_session.query.return_value = query_mock
-    query_mock.get.return_value = mock_correspondence
+    def test_save_entity_info_success_when_entity_id_exists(self, mock_repo, mock_db_session):
+        entity = MagicMock()
+        entity.entity_id = 1001
 
-    with patch("repositories.assignment.correspondence_repository.Correspondent", MagicMock()):
-        result = mock_repo.get_correspondence_info_by_correspondent_id(101)
+        result = mock_repo.save_entity_info(entity)
 
-    assert result == mock_correspondence
-    mock_db_session.query.assert_called_once()
+        assert result == entity
+        mock_db_session.add.assert_not_called()
+        mock_db_session.flush.assert_called_once()
+        mock_db_session.refresh.assert_called_once_with(entity)
 
+    def test_save_entity_info_sqlalchemy_error_on_add(self, mock_repo, mock_db_session, mock_entity):
+        mock_db_session.add.side_effect = SQLAlchemyError("db failure")
 
-def test_get_correspondence_info_by_correspondent_id_returns_none(mock_repo, mock_db_session):
-    query_mock = MagicMock()
-    mock_db_session.query.return_value = query_mock
-    query_mock.get.return_value = None
-
-    with patch("repositories.assignment.correspondence_repository.Correspondent", MagicMock()):
-        result = mock_repo.get_correspondence_info_by_correspondent_id(101)
-
-    assert result is None
-    mock_db_session.query.assert_called_once()
-
-
-def test_get_correspondence_info_by_correspondent_id_db_error(mock_repo, mock_db_session):
-    mock_db_session.query.side_effect = Exception("db failure")
-
-    with patch("repositories.assignment.correspondence_repository.Correspondent", MagicMock()):
         with pytest.raises(DatabaseException) as exc_info:
-            mock_repo.get_correspondence_info_by_correspondent_id(101)
+            mock_repo.save_entity_info(mock_entity)
 
-    assert "Unable to get Correspondent Info" in str(exc_info.value)
+        mock_db_session.rollback.assert_called_once()
+        assert "error adding entity details" in str(exc_info.value).lower()
 
+    def test_save_entity_info_sqlalchemy_error_on_flush(self, mock_repo, mock_db_session, mock_entity):
+        mock_db_session.flush.side_effect = SQLAlchemyError("flush failure")
 
-def test_get_correspondence_info_by_assignment_id_success(mock_repo, mock_db_session, mock_correspondence):
-    query_mock = MagicMock()
-    filter_mock = MagicMock()
-
-    mock_db_session.query.return_value = query_mock
-    query_mock.filter.return_value = filter_mock
-    filter_mock.first.return_value = mock_correspondence
-
-    mocked_correspondent = MagicMock()
-    mocked_correspondent.fk_assignment_id = MagicMock()
-
-    with patch("repositories.assignment.correspondence_repository.Correspondent", mocked_correspondent):
-        result = mock_repo.get_correspondence_info_by_assignment_id(123)
-
-    assert result == mock_correspondence
-    mock_db_session.query.assert_called_once_with(mocked_correspondent)
-    query_mock.filter.assert_called_once()
-    filter_mock.first.assert_called_once()
-
-
-def test_get_correspondence_info_by_assignment_id_returns_none(mock_repo, mock_db_session):
-    query_mock = MagicMock()
-    filter_mock = MagicMock()
-
-    mock_db_session.query.return_value = query_mock
-    query_mock.filter.return_value = filter_mock
-    filter_mock.first.return_value = None
-
-    mocked_correspondent = MagicMock()
-    mocked_correspondent.fk_assignment_id = MagicMock()
-
-    with patch("repositories.assignment.correspondence_repository.Correspondent", mocked_correspondent):
-        result = mock_repo.get_correspondence_info_by_assignment_id(123)
-
-    assert result is None
-    mock_db_session.query.assert_called_once_with(mocked_correspondent)
-    query_mock.filter.assert_called_once()
-    filter_mock.first.assert_called_once()
-
-
-def test_get_correspondence_info_by_assignment_id_db_error(mock_repo, mock_db_session):
-    query_mock = MagicMock()
-    mock_db_session.query.return_value = query_mock
-    query_mock.filter.side_effect = Exception("db failure")
-
-    mocked_correspondent = MagicMock()
-    mocked_correspondent.fk_assignment_id = MagicMock()
-
-    with patch("repositories.assignment.correspondence_repository.Correspondent", mocked_correspondent):
         with pytest.raises(DatabaseException) as exc_info:
-            mock_repo.get_correspondence_info_by_assignment_id(123)
+            mock_repo.save_entity_info(mock_entity)
 
-    assert "Unable to get Correspondent Info" in str(exc_info.value)
+        mock_db_session.rollback.assert_called_once()
+        assert "error adding entity details" in str(exc_info.value).lower()
 
+    def test_upsert_entity_updates_existing_entity(self, mock_repo, mock_db_session):
+        entity_data = {
+            "entity_id": 123,
+            "name": "Updated Entity"
+        }
 
-def test_save_correspondence_info_success_when_correspondent_id_is_none(mock_repo, mock_db_session):
-    correspondence = MagicMock()
-    correspondence.correspondent_id = None
+        existing_entity = MagicMock()
+        query_mock = MagicMock()
+        mock_db_session.query.return_value = query_mock
+        query_mock.get.return_value = existing_entity
 
-    result = mock_repo.save_correspondence_info(correspondence)
+        result = mock_repo.upsert_entity(entity_data)
 
-    assert result == correspondence
-    mock_db_session.add.assert_called_once_with(correspondence)
-    mock_db_session.flush.assert_called_once()
+        assert result == existing_entity
+        mock_db_session.query.assert_called_once()
+        query_mock.get.assert_called_once_with(123)
+        existing_entity.set_entity.assert_called_once_with(entity_data)
+        mock_db_session.flush.assert_called_once()
+        mock_db_session.refresh.assert_called_once_with(existing_entity)
 
+    def test_upsert_entity_creates_new_entity(self, mock_repo):
+        entity_data = {
+            "name": "New Entity"
+        }
 
-def test_save_correspondence_info_success_when_correspondent_id_exists(mock_repo, mock_db_session):
-    correspondence = MagicMock()
-    correspondence.correspondent_id = 999
+        saved_entity = MagicMock()
 
-    result = mock_repo.save_correspondence_info(correspondence)
+        with patch("repositories.assignment.entity_repository.Entity") as mock_entity_cls:
+            new_entity = MagicMock()
+            mock_entity_cls.from_dict.return_value = new_entity
+            mock_repo.save_entity_info = MagicMock(return_value=saved_entity)
 
-    assert result == correspondence
-    mock_db_session.add.assert_not_called()
-    mock_db_session.flush.assert_not_called()
+            result = mock_repo.upsert_entity(entity_data)
 
+        assert result == saved_entity
+        mock_entity_cls.from_dict.assert_called_once_with(entity_data)
+        mock_repo.save_entity_info.assert_called_once_with(new_entity)
 
-def test_save_correspondence_info_sqlalchemy_error(mock_repo, mock_db_session):
-    correspondence = MagicMock()
-    correspondence.correspondent_id = None
-    mock_db_session.add.side_effect = SQLAlchemyError("insert failed")
+    def test_upsert_entity_creates_new_entity_when_entity_id_is_none(self, mock_repo):
+        entity_data = {
+            "entity_id": None,
+            "name": "New Entity"
+        }
 
-    with pytest.raises(DatabaseException) as exc_info:
-        mock_repo.save_correspondence_info(correspondence)
+        saved_entity = MagicMock()
 
-    assert "Error saving Assignment details" in str(exc_info.value)
-    mock_db_session.add.assert_called_once_with(correspondence)
+        with patch("repositories.assignment.entity_repository.Entity") as mock_entity_cls:
+            new_entity = MagicMock()
+            mock_entity_cls.from_dict.return_value = new_entity
+            mock_repo.save_entity_info = MagicMock(return_value=saved_entity)
+
+            result = mock_repo.upsert_entity(entity_data)
+
+        assert result == saved_entity
+        mock_entity_cls.from_dict.assert_called_once_with(entity_data)
+        mock_repo.save_entity_info.assert_called_once_with(new_entity)
+
+    def test_upsert_entity_exception_raises_and_rolls_back(self, mock_repo, mock_db_session):
+        entity_data = {
+            "entity_id": 123,
+            "name": "Bad Entity"
+        }
+
+        mock_db_session.query.side_effect = Exception("unexpected failure")
+
+        with pytest.raises(Exception):
+            mock_repo.upsert_entity(entity_data)
+
+        mock_db_session.rollback.assert_called_once()
