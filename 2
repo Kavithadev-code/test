@@ -1,3 +1,8 @@
+SAVE_INPUT_DATA = {
+    "assignment_id": 123,
+    "name": "Test Party"
+}
+
 def test_save_conveying_parties_success(mock_repo, mock_db_session):
     query_mock = MagicMock()
     mock_db_session.query.return_value = query_mock
@@ -5,17 +10,29 @@ def test_save_conveying_parties_success(mock_repo, mock_db_session):
 
     fake_model = MagicMock()
 
-    with patch.object(mock_repo, "ConveyingParty", create=True, return_value=fake_model):
-        mock_repo.save_conveying_parties(SAVE_INPUT_DATA)
+    with patch(
+        "repositories.assignment.conveying_party_repository.ConveyingParty",
+        return_value=fake_model
+    ):
+        mock_repo.save_conveying_parties(SAVE_INPUT_DATA, type_id=1)
 
     mock_db_session.add.assert_called_once_with(fake_model)
     mock_db_session.commit.assert_called_once()
 
 
 def test_save_conveying_parties_db_error(mock_repo, mock_db_session):
+    query_mock = MagicMock()
+    mock_db_session.query.return_value = query_mock
+    query_mock.filter_by.return_value.first.return_value = None
+
+    fake_model = MagicMock()
     mock_db_session.add.side_effect = Exception("Database insertion failed")
 
-    with pytest.raises(DatabaseException):
-        mock_repo.save_conveying_parties(SAVE_INPUT_DATA)
+    with patch(
+        "repositories.assignment.conveying_party_repository.ConveyingParty",
+        return_value=fake_model
+    ):
+        with pytest.raises(DatabaseException):
+            mock_repo.save_conveying_parties(SAVE_INPUT_DATA, type_id=1)
 
     mock_db_session.rollback.assert_called_once()
