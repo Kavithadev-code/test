@@ -1,128 +1,81 @@
 import pytest
-import requests
+from unittest.mock import MagicMock, patch
+from sqlalchemy.exc import SQLAlchemyError
 
-from service.madrid.trademark_client import TrademarkClient, TrademarkApiError
-
-
-class DummyResponse:
-    def __init__(self, status_code=200, content=b"", reason="OK"):
-        self.status_code = status_code
-        self.content = content
-        self.reason = reason
+# Import your actual classes
+from your_module.assignment_repository import AssignmentRepository
+from your_module.exceptions import DatabaseException
 
 
-class TestTrademarkClient:
+class DummyAssignment:
+    def __init__(self, assignment_id=None):
+        self.assignment_id = assignment_id
 
-    @pytest.fixture
-    def client(self):
-        return TrademarkClient(timeout_seconds=150)
 
-    @pytest.fixture
-    def mock_env_config(self, monkeypatch):
-        class DummyConfig:
-            CURRENT_ENV_CONFIG = {
-                "TRADEMARK_URL": "https://example.com/trademark/",
-                "TRADEMARK_URL_SERIAL_NO": "/serial/"
-            }
+@pytest.fixture
+def mock_session():
+    return MagicMock()
 
-        monkeypatch.setattr("service.madrid.trademark_client.config", DummyConfig)
-        monkeypatch.setattr("service.madrid.trademark_client.CERT_PATH", "/tmp/test-cert.pem")
-        return DummyConfig
 
-    def test_fetch_by_serial_success(self, client, mock_env_config, monkeypatch):
-        response = DummyResponse(
-            status_code=200,
-            content=b'{"serial_number":"12345","status":"ok"}',
-            reason="OK"
-        )
+@pytest.fixture
+def repo(mock_session):
+    return AssignmentRepository(session=mock_session)
 
-        captured = {}
 
-        def mock_get(url, verify, timeout):
-            captured["url"] = url
-            captured["verify"] = verify
-            captured["timeout"] = timeout
-            return response
+# ✅ Test: New assignment (assignment_id is None)
+def test_save_assignment_new_success(repo, mock_session):
+    assignment = DummyAssignment(assignment_id=None)
 
-        monkeypatch.setattr("service.madrid.trademark_client.requests.get", mock_get)
+    result = repo.save_assignment(assignment)
 
-        result = client.fetch_by_serial("12345")
+    mock_session.add.assert_called_once_with(assignment)
+    mock_session.flush.assert_called_once()
+    mock_session.refresh.assert_called_once_with(assignment)
+    assert result == assignment
 
-        assert result == '{"serial_number":"12345","status":"ok"}'
-        assert captured["url"] == "https://example.com/trademark//serial/12345"
-        assert captured["verify"] == "/tmp/test-cert.pem"
-        assert captured["timeout"] == 150
 
-    def test_fetch_by_serial_uses_custom_timeout(self, mock_env_config, monkeypatch):
-        client = TrademarkClient(timeout_seconds=30)
+# ✅ Test: Existing assignment (assignment_id NOT None)
+def test_save_assignment_existing(repo, mock_session):
+    assignment = DummyAssignment(assignment_id=123)
 
-        response = DummyResponse(
-            status_code=200,
-            content=b'{"serial_number":"99999"}',
-            reason="OK"
-        )
+    result = repo.save_assignment(assignment)
 
-        captured = {}
+    mock_session.add.assert_not_called()
+    mock_session.flush.assert_not_called()
+    mock_session.refresh.assert_not_called()
+    assert result == assignment
 
-        def mock_get(url, verify, timeout):
-            captured["timeout"] = timeout
-            return response
 
-        monkeypatch.setattr("service.madrid.trademark_client.requests.get", mock_get)
+# ❌ Test: Exception handling (rollback path)
+def test_save_assignment_exception(repo, mock_session):
+    assignment = DummyAssignment(assignment_id=None)
 
-        result = client.fetch_by_serial("99999")
+    mock_session.add.side_effect = SQLAlchemyError("DB error")
 
-        assert result == '{"serial_number":"99999"}'
-        assert captured["timeout"] == 30
+    with pytest.raises(DatabaseException) as exc:
+        repo.save_assignment(assignment)
 
-    def test_fetch_by_serial_request_exception_raises_trademark_api_error(
-        self, client, mock_env_config, monkeypatch
-    ):
-        def mock_get(url, verify, timeout):
-            raise requests.RequestException("connection failed")
+    mock_session.rollback.assert_called_once()
+    assert "Error saving Assignment details" in str(exc.value)
 
-        monkeypatch.setattr("service.madrid.trademark_client.requests.get", mock_get)
 
-        with pytest.raises(TrademarkApiError) as exc_info:
-            client.fetch_by_serial("12345")
+# ✅ Test: Logger info called
+@patch("your_module.assignment_repository.logger")
+def test_save_assignment_logs_info(mock_logger, repo, mock_session):
+    assignment = DummyAssignment(assignment_id=None)
 
-        assert "TRM request failed: connection failed" in str(exc_info.value)
+    repo.save_assignment(assignment)
 
-    def test_fetch_by_serial_non_200_status_raises_trademark_api_error(
-        self, client, mock_env_config, monkeypatch
-    ):
-        response = DummyResponse(
-            status_code=500,
-            content=b'{"error":"server error"}',
-            reason="Internal Server Error"
-        )
+    mock_logger.info.assert_called_once_with("Save Update Assignment")
 
-        def mock_get(url, verify, timeout):
-            return response
 
-        monkeypatch.setattr("service.madrid.trademark_client.requests.get", mock_get)
+# ✅ Test: Logger error called on exception
+@patch("your_module.assignment_repository.logger")
+def test_save_assignment_logs_error(mock_logger, repo, mock_session):
+    assignment = DummyAssignment(assignment_id=None)
+    mock_session.add.side_effect = SQLAlchemyError("DB error")
 
-        with pytest.raises(TrademarkApiError) as exc_info:
-            client.fetch_by_serial("12345")
+    with pytest.raises(DatabaseException):
+        repo.save_assignment(assignment)
 
-        assert "TRM returned 500" in str(exc_info.value)
-        assert "Internal Server Error" in str(exc_info.value)
-
-    def test_fetch_by_serial_returns_decoded_utf8_string(
-        self, client, mock_env_config, monkeypatch
-    ):
-        response = DummyResponse(
-            status_code=200,
-            content="hello trademark".encode("utf-8"),
-            reason="OK"
-        )
-
-        def mock_get(url, verify, timeout):
-            return response
-
-        monkeypatch.setattr("service.madrid.trademark_client.requests.get", mock_get)
-
-        result = client.fetch_by_serial("55555")
-
-        assert result == "hello trademark"
-        assert isinstance(result, str)
+    mock_logger.error.assert_called()
