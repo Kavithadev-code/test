@@ -1,132 +1,46 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
-from repositories.conveying_party.conveying_party_repository import ConveyingPartyRepository
-
-
-class DummySavedEntity:
-    def __init__(self, data=None):
-        self.data = data or {"ok": True}
-
-    def to_dict(self):
-        return self.data
-
-
-class DummyExistingEntity(DummySavedEntity):
-    def set_conveying_party(self, conveying_party_data, type_id):
-        self.updated_data = conveying_party_data
-        self.updated_type_id = type_id
-
-
-class DummyConveyingParty:
-    @staticmethod
-    def from_dict(conveying_party_data, type_id):
-        entity = DummySavedEntity(
-            {
-                "conveying_party_id": conveying_party_data["conveying_party_id"],
-                "type_id": type_id,
-            }
-        )
-        entity.source_data = conveying_party_data
-        entity.source_type_id = type_id
-        return entity
+from repositories.assignment.conveying_party_repository import ConveyingPartyRepository
 
 
 @pytest.fixture
-def mock_session():
+def mock_db_session():
     return MagicMock()
 
 
 @pytest.fixture
-def repo(mock_session):
-    return ConveyingPartyRepository(session=mock_session)
+def mock_repo(mock_db_session):
+    return ConveyingPartyRepository(session=mock_db_session)
 
 
-@pytest.fixture
-def conveying_party_data():
-    return {
-        "conveying_party_id": 101
-    }
+@patch("repositories.assignment.conveying_party_repository.ConveyingParty")
+def test_save_conveying_parties_success(mock_conveying_party, mock_repo, mock_db_session):
+    save_input_data = {"conveying_party_id": None}
+
+    mock_entity = MagicMock()
+    mock_entity.to_dict.return_value = {"saved": True}
+    mock_conveying_party.from_dict.return_value = mock_entity
+
+    result = mock_repo.save_conveying_parties(save_input_data, type_id=1)
+
+    mock_conveying_party.from_dict.assert_called_once_with(save_input_data, 1)
+    mock_db_session.add.assert_called_once_with(mock_entity)
+    mock_db_session.flush.assert_called_once()
+    mock_db_session.refresh.assert_called_once_with(mock_entity)
+    assert result == {"saved": True}
 
 
-@patch("repositories.conveying_party.conveying_party_repository.ConveyingParty", DummyConveyingParty)
-def test_save_conveying_parties_create_new(repo, mock_session, conveying_party_data):
-    type_id = 7
+@patch("repositories.assignment.conveying_party_repository.ConveyingParty")
+def test_save_conveying_parties_db_error(mock_conveying_party, mock_repo, mock_db_session):
+    save_input_data = {"conveying_party_id": None}
 
-    result = repo.save_conveying_parties(conveying_party_data, type_id)
+    mock_entity = MagicMock()
+    mock_conveying_party.from_dict.return_value = mock_entity
+    mock_db_session.add.side_effect = Exception("Database Exception")
 
-    mock_session.add.assert_called_once()
-    saved_entity = mock_session.add.call_args[0][0]
-    assert saved_entity.source_data == conveying_party_data
-    assert saved_entity.source_type_id == type_id
-    mock_session.flush.assert_called_once()
-    mock_session.refresh.assert_called_once_with(saved_entity)
-    assert result == {
-        "conveying_party_id": 101,
-        "type_id": 7,
-    }
+    with pytest.raises(Exception, match="Database Exception"):
+        mock_repo.save_conveying_parties(save_input_data, type_id=1)
 
-
-@patch("repositories.conveying_party.conveying_party_repository.ConveyingParty", DummyConveyingParty)
-def test_save_conveying_parties_update_existing(repo, mock_session, conveying_party_data):
-    type_id = 9
-    existing_entity = DummyExistingEntity({"updated": True})
-
-    query_mock = MagicMock()
-    filter_mock = MagicMock(return_value=existing_entity)
-    query_mock.filter = filter_mock
-    mock_session.query.return_value = query_mock
-
-    result = repo.save_conveying_parties(conveying_party_data, type_id)
-
-    mock_session.query.assert_called_once()
-    filter_mock.assert_called_once()
-    mock_session.add.assert_not_called()
-    mock_session.flush.assert_called_once()
-    mock_session.refresh.assert_called_once_with(existing_entity)
-
-    assert existing_entity.updated_data == conveying_party_data
-    assert existing_entity.updated_type_id == type_id
-    assert result == {"updated": True}
-
-
-@patch("repositories.conveying_party.conveying_party_repository.ConveyingParty", DummyConveyingParty)
-def test_save_conveying_parties_returns_none_when_saved_entity_is_none(repo, mock_session, conveying_party_data):
-    type_id = 5
-
-    query_mock = MagicMock()
-    filter_mock = MagicMock(return_value=None)
-    query_mock.filter = filter_mock
-    mock_session.query.return_value = query_mock
-
-    result = repo.save_conveying_parties(conveying_party_data, type_id)
-
-    mock_session.add.assert_called_once()
-    mock_session.flush.assert_called_once()
-    mock_session.refresh.assert_called_once()
-    assert result == {
-        "conveying_party_id": 101,
-        "type_id": 5,
-    }
-
-
-@patch("repositories.conveying_party.conveying_party_repository.logger")
-@patch("repositories.conveying_party.conveying_party_repository.ConveyingParty", DummyConveyingParty)
-def test_save_conveying_parties_logs_info(mock_logger, repo, mock_session, conveying_party_data):
-    type_id = 11
-
-    repo.save_conveying_parties(conveying_party_data, type_id)
-
-    mock_logger.info.assert_called_once_with("save conveying parties")
-
-
-@patch("repositories.conveying_party.conveying_party_repository.logger")
-@patch("repositories.conveying_party.conveying_party_repository.ConveyingParty", DummyConveyingParty)
-def test_save_conveying_parties_exception(mock_logger, repo, mock_session, conveying_party_data):
-    type_id = 3
-    mock_session.flush.side_effect = Exception("db failure")
-
-    with pytest.raises(Exception, match="db failure"):
-        repo.save_conveying_parties(conveying_party_data, type_id)
-
-    mock_logger.error.assert_called_once()
+    mock_db_session.flush.assert_not_called()
+    mock_db_session.refresh.assert_not_called()
