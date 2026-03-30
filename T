@@ -1,158 +1,27 @@
-from typing import Any, Dict, List, Optional
+import json
+import urllib3
 
+http = urllib3.PoolManager()
 
-class AssignmentPayloadMapper:
-    DEFAULT_LOCK_CONTROL_NUMBER = 1
-    DEFAULT_CLIENT_IP = "127.0.0.1"
-    DEFAULT_SIGNATURE_NAME = "Madrid Batch"
-    DEFAULT_ELECTRONIC_SIGNATURE = "Y"
+response = http.request(
+    method="POST",
+    url=f"{url}/create_assignment",
+    body=json.dumps(assignment_payload),
+    headers={"Content-Type": "application/json"},
+    timeout=urllib3.Timeout(connect=5.0, read=30.0),
+)
 
-    @classmethod
-    def build(
-        cls,
-        trademark_data: Any,
-        conveying_parties: Optional[List[Any]] = None,
-        receiving_parties: Optional[List[Any]] = None,
-        fk_status_id: Optional[int] = None,
-        fk_assignment_type_id: Optional[int] = None,
-        madrid_event: Any = None,
-    ) -> Dict[str, Any]:
-        reg_no = cls._get_value(
-            trademark_data,
-            ["registration_number", "registrationNumber"]
-        )
+response_text = response.data.decode("utf-8", errors="ignore")
 
-        payload = {
-            "name": f"TM Assignment {reg_no}" if reg_no else "TM Assignment",
-            "fk_status_id": int(fk_status_id) if fk_status_id is not None else None,
-            "fk_assignment_type_id": int(fk_assignment_type_id) if fk_assignment_type_id is not None else None,
-            "lock_control_number": cls.DEFAULT_LOCK_CONTROL_NUMBER,
-            "tracking_number": str(reg_no) if reg_no else None,
-            "client_ip": cls.DEFAULT_CLIENT_IP,
-            "signature_full_name": cls.DEFAULT_SIGNATURE_NAME,
-            "electronic_signature": cls.DEFAULT_ELECTRONIC_SIGNATURE,
-            "conveying_parties": cls._map_parties(conveying_parties or [], default_party_code="O"),
-            "receiving_parties": cls._map_parties(receiving_parties or [], default_party_code="O"),
-        }
+print("status =", response.status)
+print("reason =", response.reason)
+print("response_text =", response_text)
 
-        return {k: v for k, v in payload.items() if v is not None}
+if response.status not in (200, 201):
+    raise Exception(
+        f"create_assignment failed with status={response.status}, "
+        f"reason={response.reason}, body={response_text}"
+    )
 
-    @classmethod
-    def _map_parties(cls, parties: List[Any], default_party_code: str) -> List[Dict[str, Any]]:
-        mapped_parties: List[Dict[str, Any]] = []
-
-        for party in parties:
-            mapped_party = cls._map_single_party(party, default_party_code)
-            if mapped_party:
-                mapped_parties.append(mapped_party)
-
-        return mapped_parties
-
-    @classmethod
-    def _map_single_party(cls, party: Any, default_party_code: str) -> Optional[Dict[str, Any]]:
-        if party is None:
-            return None
-
-        unknown_fields = cls._get_unknown_fields(party)
-
-        name = (
-            cls._get_value(party, ["name", "owner_name", "full_name", "party_name"])
-            or unknown_fields.get("name")
-            or unknown_fields.get("ownerName")
-            or unknown_fields.get("fullName")
-        )
-
-        first_name = (
-            cls._get_value(party, ["first_name", "firstName", "given_name", "givenName"])
-            or unknown_fields.get("firstName")
-            or unknown_fields.get("givenName")
-        )
-
-        last_name = (
-            cls._get_value(party, ["last_name", "lastName", "family_name", "familyName"])
-            or unknown_fields.get("lastName")
-            or unknown_fields.get("familyName")
-        )
-
-        if not name:
-            if first_name and last_name:
-                name = f"{first_name} {last_name}"
-            elif first_name:
-                name = first_name
-            elif last_name:
-                name = last_name
-
-        if not name:
-            name = "Unknown Party"
-
-        payload: Dict[str, Any] = {
-            "name": name,
-            "party_code": (
-                cls._get_value(party, ["party_code", "partyCode"])
-                or unknown_fields.get("partyCode")
-                or default_party_code
-            )
-        }
-
-        email = (
-            cls._get_value(party, ["email", "emailAddress", "email_address"])
-            or unknown_fields.get("email")
-            or unknown_fields.get("emailAddress")
-        )
-        if email:
-            payload["email"] = str(email)
-
-        phone = (
-            cls._get_value(party, ["phone", "phoneNumber", "phone_number"])
-            or unknown_fields.get("phone")
-            or unknown_fields.get("phoneNumber")
-        )
-        if phone:
-            payload["phone"] = str(phone)
-
-        address_line_1 = unknown_fields.get("addressLine1") or unknown_fields.get("address_line_1")
-        address_line_2 = unknown_fields.get("addressLine2") or unknown_fields.get("address_line_2")
-        city = unknown_fields.get("city")
-        state = unknown_fields.get("state") or unknown_fields.get("stateCode")
-        postal_code = unknown_fields.get("postalCode") or unknown_fields.get("postal_code")
-        country_code = unknown_fields.get("countryCode") or unknown_fields.get("country_code")
-
-        if address_line_1:
-            payload["address_line_1"] = address_line_1
-        if address_line_2:
-            payload["address_line_2"] = address_line_2
-        if city:
-            payload["city"] = city
-        if state:
-            payload["state"] = state
-        if postal_code:
-            payload["postal_code"] = postal_code
-        if country_code:
-            payload["country_code"] = country_code
-
-        return payload
-
-    @staticmethod
-    def _get_unknown_fields(obj: Any) -> Dict[str, Any]:
-        if obj is None:
-            return {}
-        if isinstance(obj, dict):
-            return obj.get("unknown_fields", {}) or {}
-        return getattr(obj, "unknown_fields", {}) or {}
-
-    @staticmethod
-    def _get_value(data: Any, keys: List[str], default: Any = None) -> Any:
-        if data is None:
-            return default
-
-        for key in keys:
-            if isinstance(data, dict):
-                value = data.get(key)
-                if value is not None:
-                    return value
-            elif hasattr(data, key):
-                value = getattr(data, key)
-                if value is not None:
-                    return value
-
-        return default
+result = json.loads(response_text)
+print("result =", result)
