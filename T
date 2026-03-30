@@ -1,12 +1,230 @@
-CREATE TABLE madrid_events (
-    event_id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    event_type VARCHAR(255),
-    serial_number VARCHAR(255) NOT NULL,
-    ph_code VARCHAR(255) NOT NULL,
-    event_date DATETIME,
-    processed_date DATETIME,
-    fk_status_id BIGINT,
-    CONSTRAINT fk_madrid_status
-        FOREIGN KEY (fk_status_id)
-        REFERENCES stnd_status(status_id)
-);
+from typing import Any, Dict, List, Optional
+
+
+class AssignmentPayloadMapper:
+    """
+    Builds the outbound assignment payload from Madrid event data
+    and trademark data.
+
+    Madrid repo should only transform data and send it to the
+    assignment API. It should not use assignment ORM models.
+    """
+
+    DEFAULT_STATUS_ID = 8
+    DEFAULT_ASSIGNMENT_TYPE_ID = 1
+    DEFAULT_LOCK_CONTROL_NUMBER = 1
+    DEFAULT_SIGNATURE_NAME = "Madrid Batch"
+    DEFAULT_ELECTRONIC_SIGNATURE = "Y"
+    DEFAULT_CLIENT_IP = "127.0.0.1"
+
+    @classmethod
+    def build(
+        cls,
+        trademark_data: Any,
+        madrid_event: Any,
+    ) -> Dict[str, Any]:
+        registration_number = getattr(trademark_data, "registration_number", None)
+
+        payload: Dict[str, Any] = {
+            "name": cls._build_assignment_name(registration_number),
+            "fk_status_id": cls.DEFAULT_STATUS_ID,
+            "fk_assignment_type_id": cls.DEFAULT_ASSIGNMENT_TYPE_ID,
+            "lock_control_number": cls.DEFAULT_LOCK_CONTROL_NUMBER,
+            "tracking_number": cls._safe_str(registration_number),
+            "client_ip": cls.DEFAULT_CLIENT_IP,
+            "signature_full_name": cls.DEFAULT_SIGNATURE_NAME,
+            "electronic_signature": cls.DEFAULT_ELECTRONIC_SIGNATURE,
+            "assignment_date": cls._get_assignment_date(madrid_event),
+            "correspondent": cls._build_correspondent(trademark_data),
+            "conveying_parties": cls._build_conveying_parties(trademark_data),
+            "receiving_parties": cls._build_receiving_parties(trademark_data),
+        }
+
+        return payload
+
+    @classmethod
+    def _build_assignment_name(cls, registration_number: Optional[Any]) -> str:
+        if registration_number:
+            return f"TM Assignment {registration_number}"
+        return "TM Assignment"
+
+    @classmethod
+    def _get_assignment_date(cls, madrid_event: Any) -> Optional[str]:
+        event_date = getattr(madrid_event, "event_date", None)
+        if not event_date:
+            return None
+
+        if hasattr(event_date, "isoformat"):
+            return event_date.isoformat()
+
+        return str(event_date)
+
+    @classmethod
+    def _build_correspondent(cls, trademark_data: Any) -> Optional[Dict[str, Any]]:
+        """
+        Update this method only if you actually have correspondent data
+        in the trademark response.
+
+        Returning None is fine if the assignment API allows it.
+        """
+        correspondent = getattr(trademark_data, "correspondent", None)
+        if not correspondent:
+            return None
+
+        return {
+            "name": getattr(correspondent, "name", None),
+            "email": getattr(correspondent, "email", None),
+            "phone": getattr(correspondent, "phone", None),
+            "address_line_1": getattr(correspondent, "address_line_1", None),
+            "city": getattr(correspondent, "city", None),
+            "state": getattr(correspondent, "state", None),
+            "postal_code": getattr(correspondent, "postal_code", None),
+            "country_code": getattr(correspondent, "country_code", None),
+        }
+
+    @classmethod
+    def _build_conveying_parties(cls, trademark_data: Any) -> List[Dict[str, Any]]:
+        prior_owners = getattr(trademark_data, "prior_owners", []) or []
+        parties: List[Dict[str, Any]] = []
+
+        for owner in prior_owners:
+            party = cls._build_party(owner)
+            if party:
+                parties.append(party)
+
+        return parties
+
+    @classmethod
+    def _build_receiving_parties(cls, trademark_data: Any) -> List[Dict[str, Any]]:
+        owners = getattr(trademark_data, "owners", []) or []
+        parties: List[Dict[str, Any]] = []
+
+        for owner in owners:
+            party = cls._build_party(owner)
+            if party:
+                parties.append(party)
+
+        return parties
+
+    @classmethod
+    def _build_party(cls, owner: Any) -> Optional[Dict[str, Any]]:
+        if not owner:
+            return None
+
+        name = cls._get_owner_name(owner)
+        if not name:
+            return None
+
+        payload: Dict[str, Any] = {
+            "name": name,
+            "party_code": cls._get_party_code(owner),
+        }
+
+        address = cls._extract_address(owner)
+        if address:
+            payload.update(address)
+
+        email = cls._extract_email(owner)
+        if email:
+            payload["email"] = email
+
+        phone = cls._extract_phone(owner)
+        if phone:
+            payload["phone"] = phone
+
+        return payload
+
+    @classmethod
+    def _get_owner_name(cls, owner: Any) -> Optional[str]:
+        for attr in ("name", "owner_name", "full_name"):
+            value = getattr(owner, attr, None)
+            if value:
+                return str(value)
+
+        first_name = getattr(owner, "first_name", None)
+        last_name = getattr(owner, "last_name", None)
+
+        if first_name and last_name:
+            return f"{first_name} {last_name}"
+        if first_name:
+            return str(first_name)
+        if last_name:
+            return str(last_name)
+
+        return None
+
+    @classmethod
+    def _get_party_code(cls, owner: Any) -> str:
+        """
+        Adjust this if your downstream API expects something else.
+
+        Common usage:
+        - I = Individual
+        - O = Organization / Owner / Entity
+        """
+        party_code = getattr(owner, "party_code", None)
+        if party_code:
+            return str(party_code)
+
+        # Fallback: default to organization/owner
+        return "O"
+
+    @classmethod
+    def _extract_address(cls, owner: Any) -> Dict[str, Any]:
+        address = getattr(owner, "address", None)
+        if not address:
+            return {}
+
+        return {
+            "address_line_1": getattr(address, "address_line_1", None)
+            or getattr(address, "line_1", None)
+            or getattr(address, "street_1", None),
+            "address_line_2": getattr(address, "address_line_2", None)
+            or getattr(address, "line_2", None)
+            or getattr(address, "street_2", None),
+            "city": getattr(address, "city", None),
+            "state": getattr(address, "state", None)
+            or getattr(address, "state_code", None),
+            "postal_code": getattr(address, "postal_code", None)
+            or getattr(address, "zip_code", None),
+            "country_code": getattr(address, "country_code", None)
+            or getattr(address, "country", None),
+        }
+
+    @classmethod
+    def _extract_email(cls, owner: Any) -> Optional[str]:
+        email = getattr(owner, "email", None)
+        if email:
+            return str(email)
+
+        contact_address = getattr(owner, "contact_address", None)
+        if contact_address:
+            electronic_address = getattr(contact_address, "electronic_address", None)
+            if electronic_address:
+                nested_email = getattr(electronic_address, "email", None)
+                if nested_email:
+                    return str(nested_email)
+
+        return None
+
+    @classmethod
+    def _extract_phone(cls, owner: Any) -> Optional[str]:
+        phone = getattr(owner, "phone", None)
+        if phone:
+            return str(phone)
+
+        contact_address = getattr(owner, "contact_address", None)
+        if contact_address:
+            telecom = getattr(contact_address, "telecom", None)
+            if telecom:
+                nested_phone = getattr(telecom, "phone", None)
+                if nested_phone:
+                    return str(nested_phone)
+
+        return None
+
+    @staticmethod
+    def _safe_str(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        return str(value)
