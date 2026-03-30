@@ -1,27 +1,160 @@
-import json
-import urllib3
+from typing import Any, Dict, List, Optional
 
-http = urllib3.PoolManager()
 
-response = http.request(
-    method="POST",
-    url=f"{url}/create_assignment",
-    body=json.dumps(assignment_payload),
-    headers={"Content-Type": "application/json"},
-    timeout=urllib3.Timeout(connect=5.0, read=30.0),
-)
+class AssignmentPayloadMapper:
+    DEFAULT_FORM_TYPE = "TRADEMARK"
+    DEFAULT_SIGNATURE = "Y"
+    DEFAULT_SIGNATURE_NAME = "Madrid Batch"
+    DEFAULT_CLIENT_IP = "127.0.0.1"
+    DEFAULT_LOCK_CONTROL_NUMBER = 1
+    DEFAULT_SEARCH_BY = "MADRID"
 
-response_text = response.data.decode("utf-8", errors="ignore")
+    @classmethod
+    def build(
+        cls,
+        trademark_data: Any,
+        conveying_parties: Optional[List[Any]] = None,
+        receiving_parties: Optional[List[Any]] = None,
+        madrid_event: Any = None,
+    ) -> Dict[str, Any]:
+        reg_no = cls._get_value(
+            trademark_data,
+            ["registration_number", "registrationNumber"]
+        )
 
-print("status =", response.status)
-print("reason =", response.reason)
-print("response_text =", response_text)
+        serial_no = cls._get_value(
+            trademark_data,
+            ["serial_number", "serialNumber"]
+        )
 
-if response.status not in (200, 201):
-    raise Exception(
-        f"create_assignment failed with status={response.status}, "
-        f"reason={response.reason}, body={response_text}"
-    )
+        payload = {
+            "formType": cls.DEFAULT_FORM_TYPE,
+            "name": f"TM Assignment {reg_no}" if reg_no else "TM Assignment",
+            "isMultiAssignment": False,
+            "multiAssignmentOrderNumber": None,
+            "electronicSignature": cls.DEFAULT_SIGNATURE,
+            "signatureFullName": cls.DEFAULT_SIGNATURE_NAME,
+            "trackingNumber": str(reg_no) if reg_no else None,
+            "clientIp": cls.DEFAULT_CLIENT_IP,
+            "lockControlNumber": cls.DEFAULT_LOCK_CONTROL_NUMBER,
+            "correspondentInfo": None,
+            "trademarkPropertyList": cls._build_trademark_property_list(
+                trademark_data=trademark_data,
+                serial_no=serial_no,
+                reg_no=reg_no,
+            ),
+            "conveyingInfoList": cls._map_parties(conveying_parties or []),
+            "receivingInfoList": cls._map_parties(receiving_parties or []),
+        }
 
-result = json.loads(response_text)
-print("result =", result)
+        return payload
+
+    @classmethod
+    def _build_trademark_property_list(
+        cls,
+        trademark_data: Any,
+        serial_no: Any,
+        reg_no: Any,
+    ) -> List[Dict[str, Any]]:
+        item = {
+            "serialNumber": serial_no,
+            "registrationNumber": reg_no,
+            "markLiteral": cls._get_value(trademark_data, ["mark_literal", "markLiteral"]),
+            "owner": cls._get_value(trademark_data, ["owner"]),
+            "wordMark": cls._get_value(trademark_data, ["word_mark", "wordMark"]),
+            "searchBy": cls.DEFAULT_SEARCH_BY,
+        }
+
+        return [{k: v for k, v in item.items() if v is not None}]
+
+    @classmethod
+    def _map_parties(cls, parties: List[Any]) -> List[Dict[str, Any]]:
+        mapped = []
+
+        for party in parties:
+            party_dict = cls._map_single_party(party)
+            if party_dict:
+                mapped.append(party_dict)
+
+        return mapped
+
+    @classmethod
+    def _map_single_party(cls, party: Any) -> Optional[Dict[str, Any]]:
+        if party is None:
+            return None
+
+        unknown_fields = getattr(party, "unknown_fields", {}) or {}
+
+        name = (
+            cls._get_value(party, ["name", "owner_name", "full_name"])
+            or unknown_fields.get("name")
+            or unknown_fields.get("ownerName")
+            or unknown_fields.get("fullName")
+        )
+
+        first_name = (
+            cls._get_value(party, ["first_name", "firstName", "given_name", "givenName"])
+            or unknown_fields.get("firstName")
+            or unknown_fields.get("givenName")
+        )
+
+        last_name = (
+            cls._get_value(party, ["last_name", "lastName", "family_name", "familyName"])
+            or unknown_fields.get("lastName")
+            or unknown_fields.get("familyName")
+        )
+
+        if not name:
+            if first_name and last_name:
+                name = f"{first_name} {last_name}"
+            elif first_name:
+                name = first_name
+            elif last_name:
+                name = last_name
+
+        if not name:
+            name = "Unknown Party"
+
+        payload = {
+            "name": name,
+            "partyCode": (
+                cls._get_value(party, ["party_code", "partyCode"])
+                or unknown_fields.get("partyCode")
+                or "O"
+            ),
+            "email": (
+                cls._get_value(party, ["email", "emailAddress"])
+                or unknown_fields.get("email")
+                or unknown_fields.get("emailAddress")
+            ),
+            "phone": (
+                cls._get_value(party, ["phone", "phoneNumber"])
+                or unknown_fields.get("phone")
+                or unknown_fields.get("phoneNumber")
+            ),
+            "addressLine1": unknown_fields.get("addressLine1") or unknown_fields.get("address_line_1"),
+            "addressLine2": unknown_fields.get("addressLine2") or unknown_fields.get("address_line_2"),
+            "city": unknown_fields.get("city"),
+            "state": unknown_fields.get("state") or unknown_fields.get("stateCode"),
+            "postalCode": unknown_fields.get("postalCode") or unknown_fields.get("postal_code"),
+            "countryCode": unknown_fields.get("countryCode") or unknown_fields.get("country_code"),
+        }
+
+        return {k: v for k, v in payload.items() if v is not None}
+
+    @staticmethod
+    def _get_value(data: Any, keys: List[str], default: Any = None) -> Any:
+        if data is None:
+            return default
+
+        for key in keys:
+            if isinstance(data, dict):
+                value = data.get(key)
+                if value is not None:
+                    return value
+            elif hasattr(data, key):
+                value = getattr(data, key)
+                if value is not None:
+                    return value
+
+        return default
