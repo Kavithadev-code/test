@@ -1,50 +1,42 @@
 class AssignmentPayloadMapper:
-
     @staticmethod
-    def generate_payload(madrid_event) -> dict:
-        payload = {
+    def generate_payload(madrid_event: dict) -> dict:
+        return {
             "formType": AssignmentPayloadMapper._get_form_type(madrid_event),
             "name": AssignmentPayloadMapper._get_name(madrid_event),
             "isMultiAssignment": AssignmentPayloadMapper._is_multi_assignment(madrid_event),
-            "multiAssignmentOrderNumber": AssignmentPayloadMapper._get_multi_order(madrid_event),
-            "isResubmission": False,
-            "isReviewed": False
+            "multiAssignmentOrderNumber": AssignmentPayloadMapper._get_multi_assignment_order_number(madrid_event),
+            "isResubmission": AssignmentPayloadMapper._is_resubmission(madrid_event),
+            "isReviewed": AssignmentPayloadMapper._is_reviewed(madrid_event),
         }
 
-        return payload
-
     @staticmethod
-    def _get_form_type(madrid_event):
+    def _get_form_type(madrid_event: dict) -> str:
         return "TRADEMARK"
 
     @staticmethod
-    def _get_name(madrid_event):
-        return f"TM Assignment {madrid_event.serial_number}"
+    def _get_name(madrid_event: dict) -> str:
+        serial_number = madrid_event.get("serial_number")
+        event_id = madrid_event.get("event_id")
+
+        if serial_number:
+            return f"TM Assignment {serial_number}"
+        if event_id:
+            return f"TM Assignment Event {event_id}"
+        return "TM Assignment"
 
     @staticmethod
-    def _is_multi_assignment(madrid_event):
+    def _is_multi_assignment(madrid_event: dict) -> bool:
         return False
 
     @staticmethod
-    def _get_multi_order(madrid_event):
+    def _get_multi_assignment_order_number(madrid_event: dict):
         return None
 
+    @staticmethod
+    def _is_resubmission(madrid_event: dict) -> bool:
+        return False
 
-
-
-
-
-
-response = requests.post(
-    url=url,
-    json=payload,
-    headers={
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    },
-    verify=False,
-    timeout=60
-)
-
-print("STATUS:", response.status_code)
-print("RESPONSE:", response.text)
+    @staticmethod
+    def _is_reviewed(madrid_event: dict) -> bool:
+        return False
