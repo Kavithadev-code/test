@@ -1,72 +1,100 @@
-import json
-import requests
-import urllib3
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+from typing import Any, Dict, Optional
 
 
-def process_event(self, madridEvent):
-    env_config = config.CURRENT_ENV_CONFIG
+class ConveyingPartyPayloadMapper:
+    @staticmethod
+    def generate_payloads(madrid_event: Any, assignment_id: int) -> list[dict]:
+        owners = getattr(madrid_event, "owners", None) or []
+        payloads = []
 
-    assignment_url = env_config.get("ASSIGNMENT_API_URL")
-    conveying_url = env_config.get("CONVEYING_PARTIES_API_URL")
+        for owner in owners:
+            role_seq = getattr(owner, "party_role_seq_no", None)
+            if str(role_seq) == "2001":
+                payload = ConveyingPartyPayloadMapper._map_owner(owner, assignment_id)
+                if payload:
+                    payloads.append(payload)
 
-    assignment_payload = {
-        "formType": "TRADEMARK",
-        "name": f"TM Assignment {getattr(madridEvent, 'serial_number', '')}",
-        "isMultiAssignment": False,
-        "multiAssignmentOrderNumber": None,
-        "isResubmission": False,
-        "isReviewed": False,
-    }
+        return payloads
 
-    print("ASSIGNMENT PAYLOAD")
-    print(json.dumps(assignment_payload, indent=2, default=str))
+    @staticmethod
+    def _map_owner(owner: Any, assignment_id: int) -> Optional[Dict[str, Any]]:
+        ip_info = getattr(owner, "ip_info", None)
+        if not ip_info:
+            return None
 
-    assignment_response = requests.post(
-        url=assignment_url,
-        json=assignment_payload,
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
-        verify=False,
-        timeout=60,
-    )
+        name = getattr(ip_info, "name", None)
+        party_code = getattr(ip_info, "party_code", None)
+        legal_entity = getattr(ip_info, "legal_entity", None)
 
-    print("ASSIGNMENT STATUS:", assignment_response.status_code)
-    print("ASSIGNMENT RESPONSE:", assignment_response.text)
-    assignment_response.raise_for_status()
+        given_name = getattr(ip_info, "given_name", None)
+        family_name = getattr(ip_info, "family_name", None)
+        middle_name = getattr(ip_info, "middle_name", None)
+        prefix_name = getattr(ip_info, "prefix_name", None)
+        suffix = getattr(ip_info, "suffix", None)
 
-    assignment_json = assignment_response.json()
-    assignment_id = (
-        assignment_json.get("successResponse", {})
-        .get("data", {})
-        .get("assignmentId")
-    )
+        citizenship_obj = getattr(ip_info, "citizenship", None)
 
-    if not assignment_id:
-        raise Exception("assignmentId not found in create assignment response")
+        citizenship_id = getattr(citizenship_obj, "country_code", None) if citizenship_obj else None
+        citizenship = getattr(citizenship_obj, "country_name", None) if citizenship_obj else None
+        citizenship_state_id = getattr(citizenship_obj, "state_geo_code", None) if citizenship_obj else None
+        citizenship_state = getattr(citizenship_obj, "geographic_region_name", None) if citizenship_obj else None
 
-    conveying_payload = ConveyingPartyPayloadMapper.generate_payload(
-        madrid_event=madridEvent,
-        assignment_id=assignment_id,
-    )
+        first_name, last_name = ConveyingPartyPayloadMapper._derive_names(
+            given_name=given_name,
+            family_name=family_name,
+            full_name=name,
+        )
 
-    print("CONVEYING PAYLOAD")
-    print(json.dumps(conveying_payload, indent=2, default=str))
+        base_payload = {
+            "assignmentId": assignment_id,
+            "formType": "TRADEMARK",
+            "executionDate": None,
+            "citizenshipId": citizenship_id,
+            "citizenship": citizenship,
+            "citizenshipStateId": citizenship_state_id,
+            "citizenshipState": citizenship_state,
+            "isMergedEntity": False,
+        }
 
-    conveying_response = requests.post(
-        url=conveying_url,
-        json=conveying_payload,
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
-        verify=False,
-        timeout=60,
-    )
+        if party_code == "I":
+            base_payload["conveyingType"] = "INDIVIDUAL"
+            base_payload["individual"] = {
+                "prefix": prefix_name,
+                "first_name": first_name,
+                "middle_name": middle_name,
+                "last_name": last_name,
+                "suffix": suffix,
+                "lock_control_number": 1,
+            }
+        else:
+            base_payload["conveyingType"] = "ENTITY"
+            base_payload["entity"] = {
+                "entity_name": name,
+                "legal_entity_type_id": legal_entity,
+                "lock_control_number": 1,
+            }
 
-    print("CONVEYING STATUS:", conveying_response.status_code)
-    print("CONVEYING RESPONSE:", conveying_response.text)
-    conveying_response.raise_for_status()
+        return base_payload
+
+    @staticmethod
+    def _derive_names(
+        given_name: Optional[str],
+        family_name: Optional[str],
+        full_name: Optional[str],
+    ) -> tuple[Optional[str], Optional[str]]:
+        if given_name:
+            return given_name, family_name
+
+        if not full_name:
+            return None, None
+
+        if "," in full_name:
+            parts = [p.strip() for p in full_name.split(",") if p.strip()]
+            if len(parts) >= 2:
+                return parts[1], parts[0]
+
+        parts = [p.strip() for p in full_name.split() if p.strip()]
+        if len(parts) >= 2:
+            return " ".join(parts[:-1]), parts[-1]
+
+        return full_name, full_name
