@@ -1,93 +1,35 @@
-payload = {
-    "formType": "TRADEMARK",
+payload_input = {
+    "form_type": "TRADEMARK",
     "name": "TM Assignment 1894483",
-    "isMultiAssignment": False,
-    "multiAssignmentOrderNumber": None,
-    "conveyingParties": [
-        {
-            "ownerSequenceNo": 1,
-            "partyRoleSeqNo": "2001",
-            "tmPartyRoleId": 22993693,
-            "ownerTypeCd": "OAP",
-            "assignmentDate": None,
-            "assignmentNameChange": None,
-            "docketReferenceNo": None,
-            "emailAuthorized": "N",
-            "frameNumber": None,
-            "reelNumber": None,
-            "ipInfo": {
-                "id": "IntrstdParty:0:14086835",
-                "name": "Kim, Hwi",
-                "givenName": None,
-                "middleName": None,
-                "familyName": None,
-                "prefixName": None,
-                "suffix": None,
-                "partyCode": "I",
-                "legalEntity": "I",
-                "individualMinorIndicator": "N",
-                "primaryEAGId": None,
-                "countryCode": "KR",
-                "countryName": "REPUBLIC OF KOREA",
-                "citizenship": {
-                    "countryCode": "KR",
-                    "countryName": "REPUBLIC OF KOREA"
-                },
-                "contactAddress": {
-                    "mailingAddress": {
-                        "addressName": "REPUBLIC OF KOREA"
-                    },
-                    "electronicAddresses": []
-                }
-            }
-        }
-    ],
-    "receivingParties": [
-        {
-            "ownerSequenceNo": 1,
-            "partyRoleSeqNo": "3001",
-            "tmPartyRoleId": 26629755,
-            "ownerTypeCd": "OR",
-            "assignmentDate": None,
-            "assignmentNameChange": None,
-            "docketReferenceNo": None,
-            "emailAuthorized": "N",
-            "frameNumber": None,
-            "reelNumber": None,
-            "ipInfo": {
-                "id": "IntrstdParty:0:17722897",
-                "name": "Kim, Hwi",
-                "givenName": None,
-                "middleName": None,
-                "familyName": None,
-                "prefixName": None,
-                "suffix": None,
-                "partyCode": "I",
-                "legalEntity": "I",
-                "individualMinorIndicator": "N",
-                "primaryEAGId": None,
-                "countryCode": "KR",
-                "countryName": "REPUBLIC OF KOREA",
-                "citizenship": {
-                    "countryCode": "KR",
-                    "countryName": "REPUBLIC OF KOREA"
-                },
-                "contactAddress": {
-                    "mailingAddress": {
-                        "addressName": "REPUBLIC OF KOREA"
-                    },
-                    "electronicAddresses": []
-                }
-            }
-        }
-    ]
+    "is_multi_assignment": False,
+    "multi_assignment_order_number": None,
+    "is_resubmission": False,
+    "is_reviewed": False,
 }
 
-response = requests.post(
-    url=url,
-    json=payload,
-    verify=False,
-    timeout=60
-)
-print(response.status_code)
-print(response.text)
+payload = AssignmentPayloadMapper.generate_payload(payload_input)
+
+
+
+from typing import Any, Dict
+
+
+class AssignmentPayloadMapper:
+    @staticmethod
+    def generate_payload(data: Dict[str, Any]) -> Dict[str, Any]:
+        payload = {
+            "formType": data.get("form_type", "TRADEMARK"),
+            "isMultiAssignment": bool(data.get("is_multi_assignment", False)),
+            "multiAssignmentOrderNumber": data.get("multi_assignment_order_number"),
+            "name": data.get("name"),
+            "isResubmission": bool(data.get("is_resubmission", False)),
+            "isReviewed": bool(data.get("is_reviewed", False)),
+        }
+
+        if not payload["isMultiAssignment"]:
+            payload["multiAssignmentOrderNumber"] = None
+
+        return payload
+
+
+
