@@ -1,35 +1,50 @@
-payload_input = {
-    "form_type": "TRADEMARK",
-    "name": "TM Assignment 1894483",
-    "is_multi_assignment": False,
-    "multi_assignment_order_number": None,
-    "is_resubmission": False,
-    "is_reviewed": False,
-}
-
-payload = AssignmentPayloadMapper.generate_payload(payload_input)
-
-
-
-from typing import Any, Dict
-
-
 class AssignmentPayloadMapper:
-    @staticmethod
-    def generate_payload(data: Dict[str, Any]) -> Dict[str, Any]:
-        payload = {
-            "formType": data.get("form_type", "TRADEMARK"),
-            "isMultiAssignment": bool(data.get("is_multi_assignment", False)),
-            "multiAssignmentOrderNumber": data.get("multi_assignment_order_number"),
-            "name": data.get("name"),
-            "isResubmission": bool(data.get("is_resubmission", False)),
-            "isReviewed": bool(data.get("is_reviewed", False)),
-        }
 
-        if not payload["isMultiAssignment"]:
-            payload["multiAssignmentOrderNumber"] = None
+    @staticmethod
+    def generate_payload(madrid_event) -> dict:
+        payload = {
+            "formType": AssignmentPayloadMapper._get_form_type(madrid_event),
+            "name": AssignmentPayloadMapper._get_name(madrid_event),
+            "isMultiAssignment": AssignmentPayloadMapper._is_multi_assignment(madrid_event),
+            "multiAssignmentOrderNumber": AssignmentPayloadMapper._get_multi_order(madrid_event),
+            "isResubmission": False,
+            "isReviewed": False
+        }
 
         return payload
 
+    @staticmethod
+    def _get_form_type(madrid_event):
+        return "TRADEMARK"
+
+    @staticmethod
+    def _get_name(madrid_event):
+        return f"TM Assignment {madrid_event.serial_number}"
+
+    @staticmethod
+    def _is_multi_assignment(madrid_event):
+        return False
+
+    @staticmethod
+    def _get_multi_order(madrid_event):
+        return None
 
 
+
+
+
+
+
+response = requests.post(
+    url=url,
+    json=payload,
+    headers={
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    },
+    verify=False,
+    timeout=60
+)
+
+print("STATUS:", response.status_code)
+print("RESPONSE:", response.text)
