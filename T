@@ -3,18 +3,91 @@ payload = {
     "name": "TM Assignment 1894483",
     "isMultiAssignment": False,
     "multiAssignmentOrderNumber": None,
+    "conveyingParties": [
+        {
+            "ownerSequenceNo": 1,
+            "partyRoleSeqNo": "2001",
+            "tmPartyRoleId": 22993693,
+            "ownerTypeCd": "OAP",
+            "assignmentDate": None,
+            "assignmentNameChange": None,
+            "docketReferenceNo": None,
+            "emailAuthorized": "N",
+            "frameNumber": None,
+            "reelNumber": None,
+            "ipInfo": {
+                "id": "IntrstdParty:0:14086835",
+                "name": "Kim, Hwi",
+                "givenName": None,
+                "middleName": None,
+                "familyName": None,
+                "prefixName": None,
+                "suffix": None,
+                "partyCode": "I",
+                "legalEntity": "I",
+                "individualMinorIndicator": "N",
+                "primaryEAGId": None,
+                "countryCode": "KR",
+                "countryName": "REPUBLIC OF KOREA",
+                "citizenship": {
+                    "countryCode": "KR",
+                    "countryName": "REPUBLIC OF KOREA"
+                },
+                "contactAddress": {
+                    "mailingAddress": {
+                        "addressName": "REPUBLIC OF KOREA"
+                    },
+                    "electronicAddresses": []
+                }
+            }
+        }
+    ],
+    "receivingParties": [
+        {
+            "ownerSequenceNo": 1,
+            "partyRoleSeqNo": "3001",
+            "tmPartyRoleId": 26629755,
+            "ownerTypeCd": "OR",
+            "assignmentDate": None,
+            "assignmentNameChange": None,
+            "docketReferenceNo": None,
+            "emailAuthorized": "N",
+            "frameNumber": None,
+            "reelNumber": None,
+            "ipInfo": {
+                "id": "IntrstdParty:0:17722897",
+                "name": "Kim, Hwi",
+                "givenName": None,
+                "middleName": None,
+                "familyName": None,
+                "prefixName": None,
+                "suffix": None,
+                "partyCode": "I",
+                "legalEntity": "I",
+                "individualMinorIndicator": "N",
+                "primaryEAGId": None,
+                "countryCode": "KR",
+                "countryName": "REPUBLIC OF KOREA",
+                "citizenship": {
+                    "countryCode": "KR",
+                    "countryName": "REPUBLIC OF KOREA"
+                },
+                "contactAddress": {
+                    "mailingAddress": {
+                        "addressName": "REPUBLIC OF KOREA"
+                    },
+                    "electronicAddresses": []
+                }
+            }
+        }
+    ]
 }
 
 response = requests.post(
-    url="https://assignmentcenter-dev2-internal.ipas.awslab.uspto.gov/ipas/process/api/v2/create_assignment",
+    url=url,
     json=payload,
-    headers={
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    },
     verify=False,
-    timeout=60,
+    timeout=60
 )
-
 print(response.status_code)
 print(response.text)
