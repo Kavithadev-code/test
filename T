@@ -1,23 +1,93 @@
-import json
-import requests
-import urllib3
+from typing import Any, Dict, List, Optional
 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-env_config = config.CURRENT_ENV_CONFIG
-url = env_config.get("ASSIGNMENT_API_URL")
+class ConveyingPartyPayloadMapper:
+    @staticmethod
+    def generate_payload(madrid_event: Any, assignment_id: int) -> Dict[str, Any]:
+        owners = getattr(madrid_event, "owners", None) or []
 
-payload = AssignmentPayloadMapper.generate_payload(madridEvent)
+        conveying_parties = []
+        for owner in owners:
+            role_seq = getattr(owner, "party_role_seq_no", None)
+            if str(role_seq) == "2001":
+                party_payload = ConveyingPartyPayloadMapper._map_owner(owner)
+                if party_payload:
+                    conveying_parties.append(party_payload)
 
-print("FINAL PAYLOAD")
-print(json.dumps(payload, indent=2, default=str))
+        return {
+            "assignmentId": assignment_id,
+            "formType": "TRADEMARK",
+            "conveyingParties": conveying_parties,
+        }
 
-response = requests.post(
-    url=url,
-    json=payload,
-    verify=False,
-    timeout=60
-)
+    @staticmethod
+    def _map_owner(owner: Any) -> Optional[Dict[str, Any]]:
+        ip_info = getattr(owner, "ip_info", None)
+        if not ip_info:
+            return None
 
-print("STATUS:", response.status_code)
-print("RESPONSE:", response.text)
+        party_code = getattr(ip_info, "party_code", None)
+        name = getattr(ip_info, "name", None)
+        given_name = getattr(ip_info, "given_name", None)
+        family_name = getattr(ip_info, "family_name", None)
+        middle_name = getattr(ip_info, "middle_name", None)
+        prefix_name = getattr(ip_info, "prefix_name", None)
+        suffix = getattr(ip_info, "suffix", None)
+
+        first_name, last_name = ConveyingPartyPayloadMapper._derive_names(
+            given_name=given_name,
+            family_name=family_name,
+            full_name=name,
+        )
+
+        payload = {
+            "ownerSequenceNo": getattr(owner, "owner_sequence_no", None),
+            "partyRoleSeqNo": getattr(owner, "party_role_seq_no", None),
+            "tmPartyRoleId": getattr(owner, "tm_party_role_id", None),
+            "ownerTypeCd": getattr(owner, "owner_type_cd", None),
+            "name": name,
+            "partyCode": party_code,
+        }
+
+        if party_code == "I":
+            payload["conveying_type"] = "INDIVIDUAL"
+            payload["individual"] = {
+                "prefix": prefix_name,
+                "first_name": first_name,
+                "middle_name": middle_name,
+                "last_name": last_name,
+                "suffix": suffix,
+                "lock_control_number": 1,
+            }
+        else:
+            payload["conveying_type"] = "ENTITY"
+            payload["entity"] = {
+                "entity_name": name,
+                "legal_entity_type_id": getattr(ip_info, "legal_entity", None),
+                "lock_control_number": 1,
+            }
+
+        return payload
+
+    @staticmethod
+    def _derive_names(
+        given_name: Optional[str],
+        family_name: Optional[str],
+        full_name: Optional[str],
+    ) -> tuple[Optional[str], Optional[str]]:
+        if given_name:
+            return given_name, family_name
+
+        if not full_name:
+            return None, None
+
+        if "," in full_name:
+            parts = [p.strip() for p in full_name.split(",") if p.strip()]
+            if len(parts) >= 2:
+                return parts[1], parts[0]
+
+        parts = [p.strip() for p in full_name.split() if p.strip()]
+        if len(parts) >= 2:
+            return " ".join(parts[:-1]), parts[-1]
+
+        return full_name, full_name
