@@ -1,23 +1,171 @@
-conveying_payloads = ConveyingPartyPayloadMapper.generate_payloads(
-    madrid_event=madridEvent,
-    assignment_id=assignment_id,
-)
+from typing import Any, Dict, List, Optional
 
-for payload in conveying_payloads:
-    print("CONVEYING PAYLOAD")
-    print(json.dumps(payload, indent=2, default=str))
 
-    response = requests.post(
-        url=conveying_url,
-        json=payload,
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
-        verify=False,
-        timeout=60,
-    )
+class AssignmentPartyPayloadMapper:
+    @staticmethod
+    def generate_payloads(
+        owners: List[Any],
+        assignment_id: int,
+        party_kind: str,
+        form_type: str = "TRADEMARK",
+    ) -> List[Dict[str, Any]]:
+        payloads = []
 
-    print("CONVEYING STATUS:", response.status_code)
-    print("CONVEYING RESPONSE:", response.text)
-    response.raise_for_status()
+        for owner in owners or []:
+            payload = AssignmentPartyPayloadMapper._map_owner(
+                owner=owner,
+                assignment_id=assignment_id,
+                party_kind=party_kind,
+                form_type=form_type,
+            )
+            if payload:
+                payloads.append(payload)
+
+        return payloads
+
+    @staticmethod
+    def _map_owner(
+        owner: Any,
+        assignment_id: int,
+        party_kind: str,
+        form_type: str,
+    ) -> Optional[Dict[str, Any]]:
+        ip_info = AssignmentPartyPayloadMapper._get_value(owner, "ip_info", "ipInfo")
+        if not ip_info:
+            return None
+
+        name = AssignmentPartyPayloadMapper._get_value(ip_info, "name")
+        party_code = AssignmentPartyPayloadMapper._get_value(ip_info, "party_code", "partyCode")
+        legal_entity = AssignmentPartyPayloadMapper._get_value(
+            ip_info, "legal_entity", "legalEntity"
+        )
+
+        given_name = AssignmentPartyPayloadMapper._get_value(ip_info, "given_name", "givenName")
+        family_name = AssignmentPartyPayloadMapper._get_value(
+            ip_info, "family_name", "familyName"
+        )
+        middle_name = AssignmentPartyPayloadMapper._get_value(
+            ip_info, "middle_name", "middleName"
+        )
+        prefix_name = AssignmentPartyPayloadMapper._get_value(
+            ip_info, "prefix_name", "prefixName"
+        )
+        suffix = AssignmentPartyPayloadMapper._get_value(ip_info, "suffix")
+
+        citizenship_obj = AssignmentPartyPayloadMapper._get_value(ip_info, "citizenship")
+        citizenship_id = (
+            AssignmentPartyPayloadMapper._get_value(
+                citizenship_obj, "country_code", "countryCode"
+            )
+            if citizenship_obj
+            else None
+        )
+        citizenship = (
+            AssignmentPartyPayloadMapper._get_value(
+                citizenship_obj, "country_name", "countryName"
+            )
+            if citizenship_obj
+            else None
+        )
+        citizenship_state_id = (
+            AssignmentPartyPayloadMapper._get_value(
+                citizenship_obj, "state_geo_code", "stateGeoCode"
+            )
+            if citizenship_obj
+            else None
+        )
+        citizenship_state = (
+            AssignmentPartyPayloadMapper._get_value(
+                citizenship_obj, "geographic_region_name", "geographicRegionName"
+            )
+            if citizenship_obj
+            else None
+        )
+
+        first_name, last_name = AssignmentPartyPayloadMapper._derive_names(
+            given_name=given_name,
+            family_name=family_name,
+            full_name=name,
+        )
+
+        type_field_name = AssignmentPartyPayloadMapper._get_type_field_name(party_kind)
+
+        payload = {
+            "assignmentId": assignment_id,
+            "formType": form_type,
+            type_field_name: "INDIVIDUAL" if party_code == "I" else "ENTITY",
+            "executionDate": None,
+            "citizenshipId": citizenship_id,
+            "citizenship": citizenship,
+            "citizenshipStateId": citizenship_state_id,
+            "citizenshipState": citizenship_state,
+            "isMergedEntity": False,
+        }
+
+        if party_code == "I":
+            payload["individual"] = {
+                "prefix": prefix_name,
+                "first_name": first_name,
+                "middle_name": middle_name,
+                "last_name": last_name,
+                "suffix": suffix,
+                "lock_control_number": 1,
+            }
+        else:
+            payload["entity"] = {
+                "entity_name": name,
+                "legal_entity_type_id": legal_entity,
+                "lock_control_number": 1,
+            }
+
+        return payload
+
+    @staticmethod
+    def _get_type_field_name(party_kind: str) -> str:
+        kind = (party_kind or "").strip().lower()
+        if kind == "conveying":
+            return "conveyingType"
+        if kind == "receiving":
+            return "receivingType"
+        raise ValueError(f"Unsupported party_kind: {party_kind}")
+
+    @staticmethod
+    def _derive_names(
+        given_name: Optional[str],
+        family_name: Optional[str],
+        full_name: Optional[str],
+    ) -> tuple[Optional[str], Optional[str]]:
+        if given_name:
+            return given_name, family_name
+
+        if not full_name:
+            return None, None
+
+        if "," in full_name:
+            parts = [p.strip() for p in full_name.split(",") if p.strip()]
+            if len(parts) >= 2:
+                return parts[1], parts[0]
+
+        parts = [p.strip() for p in full_name.split() if p.strip()]
+        if len(parts) >= 2:
+            return " ".join(parts[:-1]), parts[-1]
+
+        return full_name, full_name
+
+    @staticmethod
+    def _get_value(obj: Any, *names: str) -> Any:
+        if obj is None:
+            return None
+
+        for name in names:
+            if isinstance(obj, dict) and name in obj:
+                return obj.get(name)
+
+            if hasattr(obj, name):
+                return getattr(obj, name)
+
+            unknown_fields = getattr(obj, "unknown_fields", None)
+            if isinstance(unknown_fields, dict) and name in unknown_fields:
+                return unknown_fields.get(name)
+
+        return None
