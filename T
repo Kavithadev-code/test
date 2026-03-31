@@ -1,263 +1,111 @@
-from __future__ import annotations
-
-from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
 
 
-@dataclass
-class CorrespondentInfoPayload:
-    name: Optional[str] = None
-    addressLine1: Optional[str] = None
-    addressLine2: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    postalCode: Optional[str] = None
-    countryCode: Optional[str] = None
-    email: Optional[str] = None
-    phone: Optional[str] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {k: v for k, v in asdict(self).items() if v is not None}
-
-
-@dataclass
-class PartyInfoPayload:
-    name: str
-    partyCode: str = "O"
-    addressLine1: Optional[str] = None
-    addressLine2: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    postalCode: Optional[str] = None
-    countryCode: Optional[str] = None
-    email: Optional[str] = None
-    phone: Optional[str] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {k: v for k, v in asdict(self).items() if v is not None}
-
-
-@dataclass
-class TrademarkPropertyPayload:
-    serialNumber: Optional[str] = None
-    registrationNumber: Optional[int] = None
-    markLiteral: Optional[str] = None
-    owner: Optional[str] = None
-    wordMark: Optional[str] = None
-    searchedBy: Optional[str] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {k: v for k, v in asdict(self).items() if v is not None}
-
-
-@dataclass
-class AssignmentCreatePayload:
-    formType: str
-    name: str
-    isMultiAssignment: bool = False
-    multiAssignmentOrderNumber: Optional[int] = None
-    electronicSignature: Optional[str] = None
-    signatureFullName: Optional[str] = None
-    trackingNumber: Optional[str] = None
-    attorneyDocketNumber: Optional[str] = None
-    clientIp: Optional[str] = None
-    lockControlNumber: Optional[int] = None
-    correspondentInfo: Optional[CorrespondentInfoPayload] = None
-    trademarkPropertyList: List[TrademarkPropertyPayload] = field(default_factory=list)
-    conveyingInfoList: List[PartyInfoPayload] = field(default_factory=list)
-    receivingInfoList: List[PartyInfoPayload] = field(default_factory=list)
-
-    def to_dict(self) -> Dict[str, Any]:
-        payload: Dict[str, Any] = {
-            "formType": self.formType,
-            "name": self.name,
-            "isMultiAssignment": self.isMultiAssignment,
-            "multiAssignmentOrderNumber": self.multiAssignmentOrderNumber,
-            "electronicSignature": self.electronicSignature,
-            "signatureFullName": self.signatureFullName,
-            "trackingNumber": self.trackingNumber,
-            "attorneyDocketNumber": self.attorneyDocketNumber,
-            "clientIp": self.clientIp,
-            "lockControlNumber": self.lockControlNumber,
-            "correspondentInfo": (
-                self.correspondentInfo.to_dict()
-                if self.correspondentInfo is not None
-                else None
-            ),
-            "trademarkPropertyList": [
-                item.to_dict() for item in self.trademarkPropertyList
-            ],
+class AssignmentPayloadMapper:
+    @staticmethod
+    def generate_payload(data: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "clientIp": data.get("client_ip"),
+            "electronicSignature": data.get("electronic_signature"),
+            "formType": data.get("form_type"),
+            "isMultiAssignment": data.get("is_multi_assignment", False),
+            "lockControlNumber": data.get("lock_control_number", 1),
+            "name": data.get("name"),
             "conveyingInfoList": [
-                item.to_dict() for item in self.conveyingInfoList
+                AssignmentPayloadMapper._map_party(party)
+                for party in data.get("conveying_parties", [])
             ],
             "receivingInfoList": [
-                item.to_dict() for item in self.receivingInfoList
+                AssignmentPayloadMapper._map_party(party)
+                for party in data.get("receiving_parties", [])
             ],
         }
 
-        return {k: v for k, v in payload.items() if v is not None}
+    @staticmethod
+    def _map_party(party: Any) -> Dict[str, Any]:
+        ip_info = AssignmentPayloadMapper._safe_get(party, "ip_info") or {}
+        citizenship = AssignmentPayloadMapper._safe_get(ip_info, "citizenship") or {}
+        contact_address = AssignmentPayloadMapper._safe_get(ip_info, "contact_address") or {}
 
-
-class AssignmentPayloadMapper:
-    DEFAULT_FORM_TYPE = "TRADEMARK"
-    DEFAULT_SIGNATURE = "Y"
-    DEFAULT_SIGNATURE_NAME = "Madrid Batch"
-    DEFAULT_CLIENT_IP = "127.0.0.1"
-    DEFAULT_LOCK_CONTROL_NUMBER = 1
-    DEFAULT_SEARCHED_BY = "MADRID"
-
-    @classmethod
-    def build(
-        cls,
-        trademark_data: Any,
-        conveying_parties: Optional[List[Any]] = None,
-        receiving_parties: Optional[List[Any]] = None,
-    ) -> Dict[str, Any]:
-        reg_no = cls._get_value(
-            trademark_data,
-            ["registration_number", "registrationNumber"]
+        mailing_addresses = (
+            AssignmentPayloadMapper._safe_get(contact_address, "mailing_addresses") or []
+        )
+        electronic_addresses = (
+            AssignmentPayloadMapper._safe_get(contact_address, "electronic_address") or []
         )
 
-        serial_no = cls._get_value(
-            trademark_data,
-            ["serial_number", "serialNumber"]
-        )
+        first_mailing = mailing_addresses[0] if mailing_addresses else {}
+        first_email = electronic_addresses[0] if electronic_addresses else {}
 
-        payload = AssignmentCreatePayload(
-            formType=cls.DEFAULT_FORM_TYPE,
-            name=f"TM Assignment {reg_no}" if reg_no else "TM Assignment",
-            isMultiAssignment=False,
-            multiAssignmentOrderNumber=None,
-            electronicSignature=cls.DEFAULT_SIGNATURE,
-            signatureFullName=cls.DEFAULT_SIGNATURE_NAME,
-            trackingNumber=str(reg_no) if reg_no else None,
-            clientIp=cls.DEFAULT_CLIENT_IP,
-            lockControlNumber=cls.DEFAULT_LOCK_CONTROL_NUMBER,
-            correspondentInfo=None,
-            trademarkPropertyList=[
-                TrademarkPropertyPayload(
-                    serialNumber=str(serial_no) if serial_no else None,
-                    registrationNumber=int(reg_no) if reg_no else None,
-                    markLiteral=cls._get_value(
-                        trademark_data, ["mark_literal", "markLiteral"]
-                    ),
-                    owner=cls._get_value(trademark_data, ["owner"]),
-                    wordMark=cls._get_value(
-                        trademark_data, ["word_mark", "wordMark"]
-                    ),
-                    searchedBy=cls.DEFAULT_SEARCHED_BY,
-                )
-            ],
-            conveyingInfoList=cls._map_parties(conveying_parties or []),
-            receivingInfoList=cls._map_parties(receiving_parties or []),
-        )
-
-        return payload.to_dict()
-
-    @classmethod
-    def _map_parties(cls, parties: List[Any]) -> List[PartyInfoPayload]:
-        mapped: List[PartyInfoPayload] = []
-
-        for party in parties:
-            party_payload = cls._map_single_party(party)
-            if party_payload:
-                mapped.append(party_payload)
-
-        return mapped
-
-    @classmethod
-    def _map_single_party(cls, party: Any) -> Optional[PartyInfoPayload]:
-        if party is None:
-            return None
-
-        unknown_fields = getattr(party, "unknown_fields", {}) or {}
-
-        name = (
-            cls._get_value(party, ["name", "owner_name", "full_name"])
-            or unknown_fields.get("name")
-            or unknown_fields.get("ownerName")
-            or unknown_fields.get("fullName")
-        )
-
-        first_name = (
-            cls._get_value(
-                party,
-                ["first_name", "firstName", "given_name", "givenName"]
-            )
-            or unknown_fields.get("firstName")
-            or unknown_fields.get("givenName")
-        )
-
-        last_name = (
-            cls._get_value(
-                party,
-                ["last_name", "lastName", "family_name", "familyName"]
-            )
-            or unknown_fields.get("lastName")
-            or unknown_fields.get("familyName")
-        )
-
-        if not name:
-            if first_name and last_name:
-                name = f"{first_name} {last_name}"
-            elif first_name:
-                name = first_name
-            elif last_name:
-                name = last_name
-
-        if not name:
-            name = "Unknown Party"
-
-        return PartyInfoPayload(
-            name=name,
-            partyCode=(
-                cls._get_value(party, ["party_code", "partyCode"])
-                or unknown_fields.get("partyCode")
-                or "O"
+        return {
+            "ownerSequenceNo": AssignmentPayloadMapper._safe_get(party, "owner_sequence_no"),
+            "partyRoleSeqNo": AssignmentPayloadMapper._safe_get(party, "party_role_seq_no"),
+            "tmPartyRoleId": AssignmentPayloadMapper._safe_get(party, "tm_party_role_id"),
+            "ownerTypeCd": AssignmentPayloadMapper._safe_get(party, "owner_type_cd"),
+            "id": AssignmentPayloadMapper._safe_get(ip_info, "id"),
+            "name": AssignmentPayloadMapper._safe_get(ip_info, "name"),
+            "partyCode": AssignmentPayloadMapper._safe_get(ip_info, "party_code"),
+            "legalEntity": AssignmentPayloadMapper._safe_get(ip_info, "legal_entity"),
+            "givenName": AssignmentPayloadMapper._safe_get(ip_info, "given_name"),
+            "familyName": AssignmentPayloadMapper._safe_get(ip_info, "family_name"),
+            "middleName": AssignmentPayloadMapper._safe_get(ip_info, "middle_name"),
+            "prefixName": AssignmentPayloadMapper._safe_get(ip_info, "prefix_name"),
+            "suffix": AssignmentPayloadMapper._safe_get(ip_info, "suffix"),
+            "assumedName": AssignmentPayloadMapper._map_assumed_name(
+                AssignmentPayloadMapper._safe_get(ip_info, "assumed_name")
             ),
-            addressLine1=(
-                unknown_fields.get("addressLine1")
-                or unknown_fields.get("address_line_1")
-            ),
-            addressLine2=(
-                unknown_fields.get("addressLine2")
-                or unknown_fields.get("address_line_2")
-            ),
-            city=unknown_fields.get("city"),
-            state=unknown_fields.get("state") or unknown_fields.get("stateCode"),
-            postalCode=(
-                unknown_fields.get("postalCode")
-                or unknown_fields.get("postal_code")
-            ),
-            countryCode=(
-                unknown_fields.get("countryCode")
-                or unknown_fields.get("country_code")
-            ),
-            email=(
-                cls._get_value(party, ["email", "emailAddress"])
-                or unknown_fields.get("email")
-                or unknown_fields.get("emailAddress")
-            ),
-            phone=(
-                cls._get_value(party, ["phone", "phoneNumber"])
-                or unknown_fields.get("phone")
-                or unknown_fields.get("phoneNumber")
-            ),
-        )
+            "countryCode": AssignmentPayloadMapper._safe_get(citizenship, "country_code"),
+            "countryName": AssignmentPayloadMapper._safe_get(citizenship, "country_name"),
+            "mailingAddress": AssignmentPayloadMapper._map_mailing_address(first_mailing),
+            "electronicAddress": AssignmentPayloadMapper._map_electronic_address(first_email),
+        }
 
     @staticmethod
-    def _get_value(data: Any, keys: List[str], default: Any = None) -> Any:
-        if data is None:
+    def _map_assumed_name(assumed_name: Any) -> Optional[Dict[str, Any]]:
+        if not assumed_name:
+            return None
+
+        return {
+            "assumedNameTypeCd": AssignmentPayloadMapper._safe_get(assumed_name, "assumed_name_type_cd"),
+            "interestPartyAssumedName": AssignmentPayloadMapper._safe_get(
+                assumed_name, "interest_party_assumed_name"
+            ),
+        }
+
+    @staticmethod
+    def _map_mailing_address(address: Any) -> Optional[Dict[str, Any]]:
+        if not address:
+            return None
+
+        return {
+            "globalIdentifier": AssignmentPayloadMapper._safe_get(address, "global_identifier"),
+            "addressName": AssignmentPayloadMapper._safe_get(address, "address_name"),
+            "freeFormatAddress": AssignmentPayloadMapper._safe_get(address, "free_format_address"),
+            "streetAddressLineText": AssignmentPayloadMapper._safe_get(address, "street_address_line_text"),
+            "cityName": AssignmentPayloadMapper._safe_get(address, "city_name"),
+            "geographicRegionName": AssignmentPayloadMapper._safe_get(address, "geographic_region_name"),
+            "stateGeoCode": AssignmentPayloadMapper._safe_get(address, "state_geo_code"),
+            "countryCode": AssignmentPayloadMapper._safe_get(address, "country_code"),
+            "countryName": AssignmentPayloadMapper._safe_get(address, "country_name"),
+            "postalCode": AssignmentPayloadMapper._safe_get(address, "postal_code"),
+        }
+
+    @staticmethod
+    def _map_electronic_address(address: Any) -> Optional[Dict[str, Any]]:
+        if not address:
+            return None
+
+        return {
+            "electronicTypeCode": AssignmentPayloadMapper._safe_get(address, "electronic_type_code"),
+            "electronicAddressText": AssignmentPayloadMapper._safe_get(address, "electronic_address_text"),
+        }
+
+    @staticmethod
+    def _safe_get(obj: Any, key: str, default: Any = None) -> Any:
+        if obj is None:
             return default
 
-        for key in keys:
-            if isinstance(data, dict):
-                value = data.get(key)
-                if value is not None:
-                    return value
-            elif hasattr(data, key):
-                value = getattr(data, key)
-                if value is not None:
-                    return value
+        if isinstance(obj, dict):
+            return obj.get(key, default)
 
-        return default
+        return getattr(obj, key, default)
