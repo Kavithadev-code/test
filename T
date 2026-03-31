@@ -1,23 +1,23 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 
 class AssignmentPayloadMapper:
     @staticmethod
     def generate_payload(data: Dict[str, Any]) -> Dict[str, Any]:
         return {
-            "clientIp": AssignmentPayloadMapper._clean_str(data.get("client_ip")) or "127.0.0.1",
-            "electronicSignature": AssignmentPayloadMapper._clean_str(
+            "client_ip": AssignmentPayloadMapper._clean_str(data.get("client_ip")) or "127.0.0.1",
+            "electronic_signature": AssignmentPayloadMapper._clean_str(
                 data.get("electronic_signature")
             ) or "Y",
-            "formType": AssignmentPayloadMapper._clean_str(data.get("form_type")) or "TRADEMARK",
-            "isMultiAssignment": bool(data.get("is_multi_assignment", False)),
-            "lockControlNumber": data.get("lock_control_number", 1) or 1,
+            "form_type": AssignmentPayloadMapper._clean_str(data.get("form_type")) or "TRADEMARK",
+            "is_multi_assignment": bool(data.get("is_multi_assignment", False)),
+            "lock_control_number": data.get("lock_control_number", 1) or 1,
             "name": AssignmentPayloadMapper._clean_str(data.get("name")) or "TEMP",
-            "conveyingInfoList": [
+            "conveying_info_list": [
                 AssignmentPayloadMapper._map_party(party)
                 for party in (data.get("conveying_parties") or [])
             ],
-            "receivingInfoList": [
+            "receiving_info_list": [
                 AssignmentPayloadMapper._map_party(party)
                 for party in (data.get("receiving_parties") or [])
             ],
@@ -29,12 +29,8 @@ class AssignmentPayloadMapper:
         citizenship = AssignmentPayloadMapper._safe_get(ip_info, "citizenship") or {}
         contact_address = AssignmentPayloadMapper._safe_get(ip_info, "contact_address") or {}
 
-        mailing_addresses = (
-            AssignmentPayloadMapper._safe_get(contact_address, "mailing_addresses") or []
-        )
-        electronic_addresses = (
-            AssignmentPayloadMapper._safe_get(contact_address, "electronic_address") or []
-        )
+        mailing_addresses = AssignmentPayloadMapper._safe_get(contact_address, "mailing_addresses") or []
+        electronic_addresses = AssignmentPayloadMapper._safe_get(contact_address, "electronic_address") or []
 
         first_mailing = mailing_addresses[0] if mailing_addresses else {}
         first_email = electronic_addresses[0] if electronic_addresses else {}
@@ -56,50 +52,50 @@ class AssignmentPayloadMapper:
         )
 
         return {
-            "ownerSequenceNo": AssignmentPayloadMapper._safe_int(
+            "owner_sequence_no": AssignmentPayloadMapper._safe_int(
                 AssignmentPayloadMapper._safe_get(party, "owner_sequence_no"), 1
             ),
-            "partyRoleSeqNo": str(
+            "party_role_seq_no": str(
                 AssignmentPayloadMapper._safe_get(party, "party_role_seq_no") or ""
             ),
-            "tmPartyRoleId": AssignmentPayloadMapper._safe_int(
+            "tm_party_role_id": AssignmentPayloadMapper._safe_int(
                 AssignmentPayloadMapper._safe_get(party, "tm_party_role_id"), 0
             ),
-            "ownerTypeCd": AssignmentPayloadMapper._clean_str(
+            "owner_type_cd": AssignmentPayloadMapper._clean_str(
                 AssignmentPayloadMapper._safe_get(party, "owner_type_cd")
             ) or "",
             "id": AssignmentPayloadMapper._clean_str(
                 AssignmentPayloadMapper._safe_get(ip_info, "id")
             ) or "",
             "name": full_name or "UNKNOWN",
-            "partyCode": AssignmentPayloadMapper._clean_str(
+            "party_code": AssignmentPayloadMapper._clean_str(
                 AssignmentPayloadMapper._safe_get(ip_info, "party_code")
             ) or "",
-            "legalEntity": AssignmentPayloadMapper._clean_str(
+            "legal_entity": AssignmentPayloadMapper._clean_str(
                 AssignmentPayloadMapper._safe_get(ip_info, "legal_entity")
             ) or "",
-            "givenName": first_name or full_name or "UNKNOWN",
-            "familyName": last_name or full_name or "UNKNOWN",
-            "middleName": AssignmentPayloadMapper._clean_str(
+            "given_name": first_name or full_name or "UNKNOWN",
+            "family_name": last_name or full_name or "UNKNOWN",
+            "middle_name": AssignmentPayloadMapper._clean_str(
                 AssignmentPayloadMapper._safe_get(ip_info, "middle_name")
             ) or "",
-            "prefixName": AssignmentPayloadMapper._clean_str(
+            "prefix_name": AssignmentPayloadMapper._clean_str(
                 AssignmentPayloadMapper._safe_get(ip_info, "prefix_name")
             ) or "",
             "suffix": AssignmentPayloadMapper._clean_str(
                 AssignmentPayloadMapper._safe_get(ip_info, "suffix")
             ) or "",
-            "assumedName": AssignmentPayloadMapper._map_assumed_name(
+            "assumed_name": AssignmentPayloadMapper._map_assumed_name(
                 AssignmentPayloadMapper._safe_get(ip_info, "assumed_name")
             ),
-            "countryCode": AssignmentPayloadMapper._clean_str(
+            "country_code": AssignmentPayloadMapper._clean_str(
                 AssignmentPayloadMapper._safe_get(citizenship, "country_code")
             ) or "",
-            "countryName": AssignmentPayloadMapper._clean_str(
+            "country_name": AssignmentPayloadMapper._clean_str(
                 AssignmentPayloadMapper._safe_get(citizenship, "country_name")
             ) or "",
-            "mailingAddress": AssignmentPayloadMapper._map_mailing_address(first_mailing),
-            "electronicAddress": AssignmentPayloadMapper._map_electronic_address(first_email),
+            "mailing_address": AssignmentPayloadMapper._map_mailing_address(first_mailing),
+            "electronic_address": AssignmentPayloadMapper._map_electronic_address(first_email),
         }
 
     @staticmethod
@@ -131,15 +127,15 @@ class AssignmentPayloadMapper:
     def _map_assumed_name(assumed_name: Any) -> Dict[str, Any]:
         if not assumed_name:
             return {
-                "assumedNameTypeCd": "",
-                "interestPartyAssumedName": "",
+                "assumed_name_type_cd": "",
+                "interest_party_assumed_name": "",
             }
 
         return {
-            "assumedNameTypeCd": AssignmentPayloadMapper._clean_str(
+            "assumed_name_type_cd": AssignmentPayloadMapper._clean_str(
                 AssignmentPayloadMapper._safe_get(assumed_name, "assumed_name_type_cd")
             ) or "",
-            "interestPartyAssumedName": AssignmentPayloadMapper._clean_str(
+            "interest_party_assumed_name": AssignmentPayloadMapper._clean_str(
                 AssignmentPayloadMapper._safe_get(assumed_name, "interest_party_assumed_name")
             ) or "",
         }
@@ -148,47 +144,47 @@ class AssignmentPayloadMapper:
     def _map_mailing_address(address: Any) -> Dict[str, Any]:
         if not address:
             return {
-                "globalIdentifier": "",
-                "addressName": "",
-                "freeFormatAddress": "",
-                "streetAddressLineText": "",
-                "cityName": "",
-                "geographicRegionName": "",
-                "stateGeoCode": "",
-                "countryCode": "",
-                "countryName": "",
-                "postalCode": "",
+                "global_identifier": "",
+                "address_name": "",
+                "free_format_address": "",
+                "street_address_line_text": "",
+                "city_name": "",
+                "geographic_region_name": "",
+                "state_geo_code": "",
+                "country_code": "",
+                "country_name": "",
+                "postal_code": "",
             }
 
         return {
-            "globalIdentifier": AssignmentPayloadMapper._clean_str(
+            "global_identifier": AssignmentPayloadMapper._clean_str(
                 AssignmentPayloadMapper._safe_get(address, "global_identifier")
             ) or "",
-            "addressName": AssignmentPayloadMapper._clean_str(
+            "address_name": AssignmentPayloadMapper._clean_str(
                 AssignmentPayloadMapper._safe_get(address, "address_name")
             ) or "",
-            "freeFormatAddress": AssignmentPayloadMapper._clean_str(
+            "free_format_address": AssignmentPayloadMapper._clean_str(
                 AssignmentPayloadMapper._safe_get(address, "free_format_address")
             ) or "",
-            "streetAddressLineText": AssignmentPayloadMapper._clean_str(
+            "street_address_line_text": AssignmentPayloadMapper._clean_str(
                 AssignmentPayloadMapper._safe_get(address, "street_address_line_text")
             ) or "",
-            "cityName": AssignmentPayloadMapper._clean_str(
+            "city_name": AssignmentPayloadMapper._clean_str(
                 AssignmentPayloadMapper._safe_get(address, "city_name")
             ) or "",
-            "geographicRegionName": AssignmentPayloadMapper._clean_str(
+            "geographic_region_name": AssignmentPayloadMapper._clean_str(
                 AssignmentPayloadMapper._safe_get(address, "geographic_region_name")
             ) or "",
-            "stateGeoCode": AssignmentPayloadMapper._clean_str(
+            "state_geo_code": AssignmentPayloadMapper._clean_str(
                 AssignmentPayloadMapper._safe_get(address, "state_geo_code")
             ) or "",
-            "countryCode": AssignmentPayloadMapper._clean_str(
+            "country_code": AssignmentPayloadMapper._clean_str(
                 AssignmentPayloadMapper._safe_get(address, "country_code")
             ) or "",
-            "countryName": AssignmentPayloadMapper._clean_str(
+            "country_name": AssignmentPayloadMapper._clean_str(
                 AssignmentPayloadMapper._safe_get(address, "country_name")
             ) or "",
-            "postalCode": AssignmentPayloadMapper._clean_str(
+            "postal_code": AssignmentPayloadMapper._clean_str(
                 AssignmentPayloadMapper._safe_get(address, "postal_code")
             ) or "",
         }
@@ -197,15 +193,15 @@ class AssignmentPayloadMapper:
     def _map_electronic_address(address: Any) -> Dict[str, Any]:
         if not address:
             return {
-                "electronicTypeCode": "",
-                "electronicAddressText": "",
+                "electronic_type_code": "",
+                "electronic_address_text": "",
             }
 
         return {
-            "electronicTypeCode": AssignmentPayloadMapper._clean_str(
+            "electronic_type_code": AssignmentPayloadMapper._clean_str(
                 AssignmentPayloadMapper._safe_get(address, "electronic_type_code")
             ) or "",
-            "electronicAddressText": AssignmentPayloadMapper._clean_str(
+            "electronic_address_text": AssignmentPayloadMapper._clean_str(
                 AssignmentPayloadMapper._safe_get(address, "electronic_address_text")
             ) or "",
         }
