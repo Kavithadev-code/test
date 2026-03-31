@@ -1,3 +1,175 @@
-import json
+from typing import Any, Dict, Optional
 
-print(json.dumps(payload, indent=2, default=str))
+
+class AssignmentPayloadMapper:
+    @staticmethod
+    def generate_payload(data: Dict[str, Any]) -> Dict[str, Any]:
+        payload = {
+            "clientIp": data.get("client_ip"),
+            "electronicSignature": data.get("electronic_signature"),
+            "formType": data.get("form_type"),
+            "isMultiAssignment": data.get("is_multi_assignment", False),
+            "lockControlNumber": data.get("lock_control_number", 1),
+            "name": data.get("name"),
+            "conveyingInfoList": [
+                AssignmentPayloadMapper._map_party(party)
+                for party in (data.get("conveying_parties") or [])
+            ],
+            "receivingInfoList": [
+                AssignmentPayloadMapper._map_party(party)
+                for party in (data.get("receiving_parties") or [])
+            ],
+        }
+        return AssignmentPayloadMapper._remove_none(payload)
+
+    @staticmethod
+    def _map_party(party: Any) -> Dict[str, Any]:
+        ip_info = AssignmentPayloadMapper._safe_get(party, "ip_info") or {}
+        citizenship = AssignmentPayloadMapper._safe_get(ip_info, "citizenship") or {}
+        contact_address = AssignmentPayloadMapper._safe_get(ip_info, "contact_address") or {}
+
+        mailing_addresses = (
+            AssignmentPayloadMapper._safe_get(contact_address, "mailing_addresses") or []
+        )
+        electronic_addresses = (
+            AssignmentPayloadMapper._safe_get(contact_address, "electronic_address") or []
+        )
+
+        first_mailing = mailing_addresses[0] if mailing_addresses else None
+        first_email = electronic_addresses[0] if electronic_addresses else None
+
+        name = AssignmentPayloadMapper._safe_get(ip_info, "name")
+        given_name = AssignmentPayloadMapper._safe_get(ip_info, "given_name")
+        family_name = AssignmentPayloadMapper._safe_get(ip_info, "family_name")
+        middle_name = AssignmentPayloadMapper._safe_get(ip_info, "middle_name")
+        prefix_name = AssignmentPayloadMapper._safe_get(ip_info, "prefix_name")
+        suffix = AssignmentPayloadMapper._safe_get(ip_info, "suffix")
+
+        first_name, last_name = AssignmentPayloadMapper._derive_names(
+            given_name=given_name,
+            family_name=family_name,
+            full_name=name,
+        )
+
+        mapped = {
+            "ownerSequenceNo": AssignmentPayloadMapper._safe_get(party, "owner_sequence_no"),
+            "partyRoleSeqNo": AssignmentPayloadMapper._safe_get(party, "party_role_seq_no"),
+            "tmPartyRoleId": AssignmentPayloadMapper._safe_get(party, "tm_party_role_id"),
+            "ownerTypeCd": AssignmentPayloadMapper._safe_get(party, "owner_type_cd"),
+            "id": AssignmentPayloadMapper._safe_get(ip_info, "id"),
+            "name": name,
+            "partyCode": AssignmentPayloadMapper._safe_get(ip_info, "party_code"),
+            "legalEntity": AssignmentPayloadMapper._safe_get(ip_info, "legal_entity"),
+            "givenName": first_name,
+            "familyName": last_name,
+            "middleName": middle_name,
+            "prefixName": prefix_name,
+            "suffix": suffix,
+            "assumedName": AssignmentPayloadMapper._map_assumed_name(
+                AssignmentPayloadMapper._safe_get(ip_info, "assumed_name")
+            ),
+            "countryCode": AssignmentPayloadMapper._safe_get(citizenship, "country_code"),
+            "countryName": AssignmentPayloadMapper._safe_get(citizenship, "country_name"),
+            "mailingAddress": AssignmentPayloadMapper._map_mailing_address(first_mailing),
+            "electronicAddress": AssignmentPayloadMapper._map_electronic_address(first_email),
+        }
+
+        return AssignmentPayloadMapper._remove_none(mapped)
+
+    @staticmethod
+    def _derive_names(
+        given_name: Optional[str],
+        family_name: Optional[str],
+        full_name: Optional[str],
+    ) -> tuple[Optional[str], Optional[str]]:
+        if given_name:
+            return given_name, family_name
+
+        if full_name:
+            parts = [part.strip() for part in full_name.split(",") if part.strip()]
+            if len(parts) == 2:
+                return parts[1], parts[0]
+
+            space_parts = [part for part in full_name.strip().split() if part]
+            if len(space_parts) >= 2:
+                return " ".join(space_parts[:-1]), space_parts[-1]
+
+            return full_name, full_name
+
+        return None, None
+
+    @staticmethod
+    def _map_assumed_name(assumed_name: Any) -> Optional[Dict[str, Any]]:
+        if not assumed_name:
+            return None
+
+        mapped = {
+            "assumedNameTypeCd": AssignmentPayloadMapper._safe_get(
+                assumed_name, "assumed_name_type_cd"
+            ),
+            "interestPartyAssumedName": AssignmentPayloadMapper._safe_get(
+                assumed_name, "interest_party_assumed_name"
+            ),
+        }
+        return AssignmentPayloadMapper._remove_none(mapped) or None
+
+    @staticmethod
+    def _map_mailing_address(address: Any) -> Optional[Dict[str, Any]]:
+        if not address:
+            return None
+
+        postal_code = AssignmentPayloadMapper._safe_get(address, "postal_code")
+        if postal_code == "":
+            postal_code = None
+
+        mapped = {
+            "globalIdentifier": AssignmentPayloadMapper._safe_get(address, "global_identifier"),
+            "addressName": AssignmentPayloadMapper._safe_get(address, "address_name"),
+            "freeFormatAddress": AssignmentPayloadMapper._safe_get(address, "free_format_address"),
+            "streetAddressLineText": AssignmentPayloadMapper._safe_get(
+                address, "street_address_line_text"
+            ),
+            "cityName": AssignmentPayloadMapper._safe_get(address, "city_name"),
+            "geographicRegionName": AssignmentPayloadMapper._safe_get(
+                address, "geographic_region_name"
+            ),
+            "stateGeoCode": AssignmentPayloadMapper._safe_get(address, "state_geo_code"),
+            "countryCode": AssignmentPayloadMapper._safe_get(address, "country_code"),
+            "countryName": AssignmentPayloadMapper._safe_get(address, "country_name"),
+            "postalCode": postal_code,
+        }
+        return AssignmentPayloadMapper._remove_none(mapped) or None
+
+    @staticmethod
+    def _map_electronic_address(address: Any) -> Optional[Dict[str, Any]]:
+        if not address:
+            return None
+
+        mapped = {
+            "electronicTypeCode": AssignmentPayloadMapper._safe_get(
+                address, "electronic_type_code"
+            ),
+            "electronicAddressText": AssignmentPayloadMapper._safe_get(
+                address, "electronic_address_text"
+            ),
+        }
+        return AssignmentPayloadMapper._remove_none(mapped) or None
+
+    @staticmethod
+    def _remove_none(data: Dict[str, Any]) -> Dict[str, Any]:
+        cleaned = {}
+        for key, value in data.items():
+            if value is None:
+                continue
+            if value == "":
+                continue
+            cleaned[key] = value
+        return cleaned
+
+    @staticmethod
+    def _safe_get(obj: Any, key: str, default: Any = None) -> Any:
+        if obj is None:
+            return default
+        if isinstance(obj, dict):
+            return obj.get(key, default)
+        return getattr(obj, key, default)
