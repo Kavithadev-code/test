@@ -1,42 +1,23 @@
-class AssignmentPayloadMapper:
-    @staticmethod
-    def generate_payload(madrid_event: dict) -> dict:
-        return {
-            "formType": AssignmentPayloadMapper._get_form_type(madrid_event),
-            "name": AssignmentPayloadMapper._get_name(madrid_event),
-            "isMultiAssignment": AssignmentPayloadMapper._is_multi_assignment(madrid_event),
-            "multiAssignmentOrderNumber": AssignmentPayloadMapper._get_multi_assignment_order_number(madrid_event),
-            "isResubmission": AssignmentPayloadMapper._is_resubmission(madrid_event),
-            "isReviewed": AssignmentPayloadMapper._is_reviewed(madrid_event),
-        }
+import json
+import requests
+import urllib3
 
-    @staticmethod
-    def _get_form_type(madrid_event: dict) -> str:
-        return "TRADEMARK"
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-    @staticmethod
-    def _get_name(madrid_event: dict) -> str:
-        serial_number = madrid_event.get("serial_number")
-        event_id = madrid_event.get("event_id")
+env_config = config.CURRENT_ENV_CONFIG
+url = env_config.get("ASSIGNMENT_API_URL")
 
-        if serial_number:
-            return f"TM Assignment {serial_number}"
-        if event_id:
-            return f"TM Assignment Event {event_id}"
-        return "TM Assignment"
+payload = AssignmentPayloadMapper.generate_payload(madridEvent)
 
-    @staticmethod
-    def _is_multi_assignment(madrid_event: dict) -> bool:
-        return False
+print("FINAL PAYLOAD")
+print(json.dumps(payload, indent=2, default=str))
 
-    @staticmethod
-    def _get_multi_assignment_order_number(madrid_event: dict):
-        return None
+response = requests.post(
+    url=url,
+    json=payload,
+    verify=False,
+    timeout=60
+)
 
-    @staticmethod
-    def _is_resubmission(madrid_event: dict) -> bool:
-        return False
-
-    @staticmethod
-    def _is_reviewed(madrid_event: dict) -> bool:
-        return False
+print("STATUS:", response.status_code)
+print("RESPONSE:", response.text)
