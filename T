@@ -1,10 +1,235 @@
-{
-    "clientIp": "151.207.40.24",
-    "electronicSignature": "Y",
-    "formType": "TRADEMARK",
-    "isMultiAssignment": False,
-    "lockControlNumber": 1,
-    "name": "TM Assignment 1894483",
-    "conveyingInfoList": [...],
-    "receivingInfoList": [...]
-}
+from typing import Any, Dict, List, Optional
+
+
+class AssignmentPayloadMapper:
+    @staticmethod
+    def generate_payload(data: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "clientIp": AssignmentPayloadMapper._clean_str(data.get("client_ip")) or "127.0.0.1",
+            "electronicSignature": AssignmentPayloadMapper._clean_str(
+                data.get("electronic_signature")
+            ) or "Y",
+            "formType": AssignmentPayloadMapper._clean_str(data.get("form_type")) or "TRADEMARK",
+            "isMultiAssignment": bool(data.get("is_multi_assignment", False)),
+            "lockControlNumber": data.get("lock_control_number", 1) or 1,
+            "name": AssignmentPayloadMapper._clean_str(data.get("name")) or "TEMP",
+            "conveyingInfoList": [
+                AssignmentPayloadMapper._map_party(party)
+                for party in (data.get("conveying_parties") or [])
+            ],
+            "receivingInfoList": [
+                AssignmentPayloadMapper._map_party(party)
+                for party in (data.get("receiving_parties") or [])
+            ],
+        }
+
+    @staticmethod
+    def _map_party(party: Any) -> Dict[str, Any]:
+        ip_info = AssignmentPayloadMapper._safe_get(party, "ip_info") or {}
+        citizenship = AssignmentPayloadMapper._safe_get(ip_info, "citizenship") or {}
+        contact_address = AssignmentPayloadMapper._safe_get(ip_info, "contact_address") or {}
+
+        mailing_addresses = (
+            AssignmentPayloadMapper._safe_get(contact_address, "mailing_addresses") or []
+        )
+        electronic_addresses = (
+            AssignmentPayloadMapper._safe_get(contact_address, "electronic_address") or []
+        )
+
+        first_mailing = mailing_addresses[0] if mailing_addresses else {}
+        first_email = electronic_addresses[0] if electronic_addresses else {}
+
+        full_name = AssignmentPayloadMapper._clean_str(
+            AssignmentPayloadMapper._safe_get(ip_info, "name")
+        )
+        given_name = AssignmentPayloadMapper._clean_str(
+            AssignmentPayloadMapper._safe_get(ip_info, "given_name")
+        )
+        family_name = AssignmentPayloadMapper._clean_str(
+            AssignmentPayloadMapper._safe_get(ip_info, "family_name")
+        )
+
+        first_name, last_name = AssignmentPayloadMapper._derive_names(
+            given_name=given_name,
+            family_name=family_name,
+            full_name=full_name,
+        )
+
+        return {
+            "ownerSequenceNo": AssignmentPayloadMapper._safe_int(
+                AssignmentPayloadMapper._safe_get(party, "owner_sequence_no"), 1
+            ),
+            "partyRoleSeqNo": str(
+                AssignmentPayloadMapper._safe_get(party, "party_role_seq_no") or ""
+            ),
+            "tmPartyRoleId": AssignmentPayloadMapper._safe_int(
+                AssignmentPayloadMapper._safe_get(party, "tm_party_role_id"), 0
+            ),
+            "ownerTypeCd": AssignmentPayloadMapper._clean_str(
+                AssignmentPayloadMapper._safe_get(party, "owner_type_cd")
+            ) or "",
+            "id": AssignmentPayloadMapper._clean_str(
+                AssignmentPayloadMapper._safe_get(ip_info, "id")
+            ) or "",
+            "name": full_name or "UNKNOWN",
+            "partyCode": AssignmentPayloadMapper._clean_str(
+                AssignmentPayloadMapper._safe_get(ip_info, "party_code")
+            ) or "",
+            "legalEntity": AssignmentPayloadMapper._clean_str(
+                AssignmentPayloadMapper._safe_get(ip_info, "legal_entity")
+            ) or "",
+            "givenName": first_name or full_name or "UNKNOWN",
+            "familyName": last_name or full_name or "UNKNOWN",
+            "middleName": AssignmentPayloadMapper._clean_str(
+                AssignmentPayloadMapper._safe_get(ip_info, "middle_name")
+            ) or "",
+            "prefixName": AssignmentPayloadMapper._clean_str(
+                AssignmentPayloadMapper._safe_get(ip_info, "prefix_name")
+            ) or "",
+            "suffix": AssignmentPayloadMapper._clean_str(
+                AssignmentPayloadMapper._safe_get(ip_info, "suffix")
+            ) or "",
+            "assumedName": AssignmentPayloadMapper._map_assumed_name(
+                AssignmentPayloadMapper._safe_get(ip_info, "assumed_name")
+            ),
+            "countryCode": AssignmentPayloadMapper._clean_str(
+                AssignmentPayloadMapper._safe_get(citizenship, "country_code")
+            ) or "",
+            "countryName": AssignmentPayloadMapper._clean_str(
+                AssignmentPayloadMapper._safe_get(citizenship, "country_name")
+            ) or "",
+            "mailingAddress": AssignmentPayloadMapper._map_mailing_address(first_mailing),
+            "electronicAddress": AssignmentPayloadMapper._map_electronic_address(first_email),
+        }
+
+    @staticmethod
+    def _derive_names(
+        given_name: Optional[str],
+        family_name: Optional[str],
+        full_name: Optional[str],
+    ) -> tuple[Optional[str], Optional[str]]:
+        if given_name:
+            return given_name, family_name or given_name
+
+        if not full_name:
+            return "UNKNOWN", "UNKNOWN"
+
+        full_name = full_name.strip()
+
+        if "," in full_name:
+            parts = [part.strip() for part in full_name.split(",") if part.strip()]
+            if len(parts) >= 2:
+                return parts[1], parts[0]
+
+        tokens = [token.strip() for token in full_name.split() if token.strip()]
+        if len(tokens) >= 2:
+            return " ".join(tokens[:-1]), tokens[-1]
+
+        return full_name, full_name
+
+    @staticmethod
+    def _map_assumed_name(assumed_name: Any) -> Dict[str, Any]:
+        if not assumed_name:
+            return {
+                "assumedNameTypeCd": "",
+                "interestPartyAssumedName": "",
+            }
+
+        return {
+            "assumedNameTypeCd": AssignmentPayloadMapper._clean_str(
+                AssignmentPayloadMapper._safe_get(assumed_name, "assumed_name_type_cd")
+            ) or "",
+            "interestPartyAssumedName": AssignmentPayloadMapper._clean_str(
+                AssignmentPayloadMapper._safe_get(assumed_name, "interest_party_assumed_name")
+            ) or "",
+        }
+
+    @staticmethod
+    def _map_mailing_address(address: Any) -> Dict[str, Any]:
+        if not address:
+            return {
+                "globalIdentifier": "",
+                "addressName": "",
+                "freeFormatAddress": "",
+                "streetAddressLineText": "",
+                "cityName": "",
+                "geographicRegionName": "",
+                "stateGeoCode": "",
+                "countryCode": "",
+                "countryName": "",
+                "postalCode": "",
+            }
+
+        return {
+            "globalIdentifier": AssignmentPayloadMapper._clean_str(
+                AssignmentPayloadMapper._safe_get(address, "global_identifier")
+            ) or "",
+            "addressName": AssignmentPayloadMapper._clean_str(
+                AssignmentPayloadMapper._safe_get(address, "address_name")
+            ) or "",
+            "freeFormatAddress": AssignmentPayloadMapper._clean_str(
+                AssignmentPayloadMapper._safe_get(address, "free_format_address")
+            ) or "",
+            "streetAddressLineText": AssignmentPayloadMapper._clean_str(
+                AssignmentPayloadMapper._safe_get(address, "street_address_line_text")
+            ) or "",
+            "cityName": AssignmentPayloadMapper._clean_str(
+                AssignmentPayloadMapper._safe_get(address, "city_name")
+            ) or "",
+            "geographicRegionName": AssignmentPayloadMapper._clean_str(
+                AssignmentPayloadMapper._safe_get(address, "geographic_region_name")
+            ) or "",
+            "stateGeoCode": AssignmentPayloadMapper._clean_str(
+                AssignmentPayloadMapper._safe_get(address, "state_geo_code")
+            ) or "",
+            "countryCode": AssignmentPayloadMapper._clean_str(
+                AssignmentPayloadMapper._safe_get(address, "country_code")
+            ) or "",
+            "countryName": AssignmentPayloadMapper._clean_str(
+                AssignmentPayloadMapper._safe_get(address, "country_name")
+            ) or "",
+            "postalCode": AssignmentPayloadMapper._clean_str(
+                AssignmentPayloadMapper._safe_get(address, "postal_code")
+            ) or "",
+        }
+
+    @staticmethod
+    def _map_electronic_address(address: Any) -> Dict[str, Any]:
+        if not address:
+            return {
+                "electronicTypeCode": "",
+                "electronicAddressText": "",
+            }
+
+        return {
+            "electronicTypeCode": AssignmentPayloadMapper._clean_str(
+                AssignmentPayloadMapper._safe_get(address, "electronic_type_code")
+            ) or "",
+            "electronicAddressText": AssignmentPayloadMapper._clean_str(
+                AssignmentPayloadMapper._safe_get(address, "electronic_address_text")
+            ) or "",
+        }
+
+    @staticmethod
+    def _safe_get(obj: Any, key: str, default: Any = None) -> Any:
+        if obj is None:
+            return default
+        if isinstance(obj, dict):
+            return obj.get(key, default)
+        return getattr(obj, key, default)
+
+    @staticmethod
+    def _clean_str(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        value = str(value).strip()
+        return value if value else None
+
+    @staticmethod
+    def _safe_int(value: Any, default: int) -> int:
+        try:
+            if value is None or value == "":
+                return default
+            return int(value)
+        except (TypeError, ValueError):
+            return default
