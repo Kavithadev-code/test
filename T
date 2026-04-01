@@ -1,38 +1,45 @@
-payload = {
-    "assignmentId": 17804,
-    "formType": "TRADEMARK",
-    "receivingType": "INDIVIDUAL",
-    "receivingEmail": "test@test.com",
-    "citizenshipId": 840,
-    "citizenship": "US",
-    "citizenshipStateId": 1,
-    "citizenshipState": "NY",
-    "executionDate": "2026-04-01",
-    "addressInfo": {
-        "addressId": None,
-        "attention": "Test Receiver",
-        "addressLineOne": "123 Main St",
-        "addressLineTwo": None,
-        "city": "New York",
-        "stateId": 1,
-        "zipcode": "10001",
-        "countryId": 840,
-        "lockControlNumber": 1
-    }
-}
+composed_of_party_list = []
 
-print(json.dumps(payload, indent=2))
+for composed_owner in composed_parties or []:
+    composed_ip_info = getattr(composed_owner, "ip_info", None) or composed_owner
+    composed_party_code = getattr(composed_ip_info, "party_code", None)
+    composed_type = "INDIVIDUAL" if composed_party_code == "I" else "ENTITY"
 
-receiving_response = requests.post(
-    url=receiving_url,
-    json=payload,
-    headers={
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    },
-    verify=False,
-    timeout=60,
-)
+    if composed_type == "INDIVIDUAL":
+        first_name, last_name = ReceivingPartyPayloadMapper._derive_names(
+            getattr(composed_ip_info, "given_name", None),
+            getattr(composed_ip_info, "family_name", None),
+            getattr(composed_ip_info, "name", None),
+        )
 
-print(receiving_response.status_code)
-print(receiving_response.text)
+        individual_block = {
+            "individualId": 1,
+            "prefix": getattr(composed_ip_info, "prefix_name", None),
+            "firstName": first_name or "UNKNOWN",
+            "middleName": getattr(composed_ip_info, "middle_name", None),
+            "lastName": last_name or "UNKNOWN",
+            "suffix": getattr(composed_ip_info, "suffix", None),
+            "lockControlNumber": 1,
+        }
+
+        composed_payload = {
+            "composedofPartyType": "INDIVIDUAL",
+            "individual": individual_block.copy(),
+        }
+
+    else:
+        entity_block = {
+            "entityId": 1,
+            "entityName": getattr(composed_ip_info, "name", None) or "UNKNOWN ENTITY",
+            "legalEntityTypeId": ReceivingPartyPayloadMapper._safe_int(
+                getattr(composed_ip_info, "legal_entity", None)
+            ) or 1,
+            "lockControlNumber": 1,
+        }
+
+        composed_payload = {
+            "composedofPartyType": "ENTITY",
+            "entity": entity_block.copy(),
+        }
+
+    composed_of_party_list.append(composed_payload)
