@@ -2,50 +2,50 @@ from datetime import datetime
 
 
 class ReceivingPartyPayloadMapper:
+    @staticmethod
+    def generate_payloads(owners, assignment_id):
+        payloads = []
+
+        for owner in owners or []:
+            payload = ReceivingPartyPayloadMapper.build_payload(owner, assignment_id)
+            if payload:
+                payloads.append(payload)
+
+        return payloads
 
     @staticmethod
     def build_payload(owner, assignment_id):
-        """
-        Build payload ONLY for API route call (camelCase).
-        """
-
         ip_info = getattr(owner, "ip_info", None)
+        if not ip_info:
+            return None
 
-        # ----------------------------
-        # RECEIVING TYPE
-        # ----------------------------
         party_code = getattr(ip_info, "party_code", None)
         receiving_type = "INDIVIDUAL" if party_code == "I" else "ENTITY"
 
-        # ----------------------------
-        # EMAIL
-        # ----------------------------
         email = None
-        if ip_info and getattr(ip_info, "contact_address", None):
-            electronic_addresses = getattr(ip_info.contact_address, "electronic_addresses", [])
+        contact_address = getattr(ip_info, "contact_address", None)
+        if contact_address:
+            electronic_addresses = getattr(contact_address, "electronic_addresses", []) or []
             if electronic_addresses:
-                email = getattr(electronic_addresses[0], "email", None)
+                electronic_address = electronic_addresses[0]
+                email = getattr(electronic_address, "email", None) or getattr(
+                    electronic_address, "electronic_address_text", None
+                )
 
-        # ----------------------------
-        # CITIZENSHIP
-        # ----------------------------
         citizenship = getattr(ip_info, "citizenship", None)
-        citizenship_id = getattr(citizenship, "country_code", None) if citizenship else None
-        citizenship_name = getattr(citizenship, "country_name", None) if citizenship else None
+        citizenship_id = (
+            getattr(citizenship, "country_code", None) if citizenship else None
+        )
+        citizenship_name = (
+            getattr(citizenship, "country_name", None) if citizenship else None
+        )
 
-        # ----------------------------
-        # ADDRESS
-        # ----------------------------
         address_info = None
-
-        if ip_info and getattr(ip_info, "contact_address", None):
-            mailing_addresses = getattr(ip_info.contact_address, "mailing_addresses", [])
-
+        if contact_address:
+            mailing_addresses = getattr(contact_address, "mailing_addresses", []) or []
             if mailing_addresses:
                 addr = mailing_addresses[0]
                 postal_code = getattr(addr, "postal_code", None)
-
-                # IMPORTANT: API expects STRING, not int
                 zip_code = str(postal_code)[:5] if postal_code else None
 
                 address_info = {
@@ -61,9 +61,6 @@ class ReceivingPartyPayloadMapper:
                     "lockControlNumber": 1,
                 }
 
-        # ----------------------------
-        # BASE PAYLOAD (ROUTE FORMAT)
-        # ----------------------------
         payload = {
             "assignmentId": assignment_id,
             "formType": "TRADEMARK",
@@ -75,32 +72,52 @@ class ReceivingPartyPayloadMapper:
             "citizenshipState": None,
             "executionDate": datetime.utcnow().strftime("%Y-%m-%d"),
             "addressInfo": address_info,
-
-            # REQUIRED BY ROUTE (DO NOT REMOVE)
             "domesticAddressInfo": None,
-            "composedofPartyList": []
+            "composedOfPartyList": [],
         }
 
-        # ----------------------------
-        # NAME / REPRESENTATIVE
-        # ----------------------------
         if receiving_type == "INDIVIDUAL":
-            payload["representative"] = {
+            first_name = getattr(ip_info, "given_name", None)
+            last_name = getattr(ip_info, "family_name", None)
+            full_name = getattr(ip_info, "name", None)
+
+            if not first_name and full_name:
+                if "," in full_name:
+                    parts = [p.strip() for p in full_name.split(",")]
+                    if len(parts) >= 2:
+                        first_name = parts[1]
+                        last_name = parts[0]
+                else:
+                    parts = full_name.split()
+                    if len(parts) == 1:
+                        first_name = parts[0]
+                        last_name = None
+                    elif len(parts) >= 2:
+                        first_name = parts[0]
+                        last_name = parts[-1]
+
+            individual_block = {
                 "individualId": None,
                 "prefix": getattr(ip_info, "prefix_name", None),
-                "firstName": getattr(ip_info, "given_name", None) or getattr(ip_info, "name", None),
+                "firstName": first_name,
                 "middleName": getattr(ip_info, "middle_name", None),
-                "lastName": getattr(ip_info, "family_name", None),
+                "lastName": last_name,
                 "suffix": getattr(ip_info, "suffix", None),
                 "lockControlNumber": 1,
             }
 
+            payload["representative"] = individual_block.copy()
+            payload["individual"] = individual_block.copy()
+
         else:
-            payload["representative"] = {
+            entity_block = {
                 "entityId": None,
                 "entityName": getattr(ip_info, "name", None),
                 "legalEntityTypeId": None,
                 "lockControlNumber": 1,
             }
+
+            payload["representative"] = entity_block.copy()
+            payload["entity"] = entity_block.copy()
 
         return payload
