@@ -1,123 +1,54 @@
-from datetime import datetime
+entity_name = ReceivingPartyPayloadMapper._get_value(ip_info, "name")
+
+entity_block = {
+    "entityId": None,
+    "entityName": entity_name or "UNKNOWN ENTITY",
+    "legalEntityTypeId": 1,   # ⚠️ IMPORTANT: must be valid ID (check DB)
+    "lockControlNumber": 1,
+}
 
 
-class ReceivingPartyPayloadMapper:
-    @staticmethod
-    def generate_payloads(owners, assignment_id):
-        payloads = []
 
-        for owner in owners or []:
-            payload = ReceivingPartyPayloadMapper.build_payload(owner, assignment_id)
-            if payload:
-                payloads.append(payload)
 
-        return payloads
 
-    @staticmethod
-    def build_payload(owner, assignment_id):
-        ip_info = getattr(owner, "ip_info", None)
-        if not ip_info:
-            return None
 
-        party_code = getattr(ip_info, "party_code", None)
-        receiving_type = "INDIVIDUAL" if party_code == "I" else "ENTITY"
+@staticmethod
+def _safe_int(value):
+    try:
+        return int(value)
+    except:
+        return None
 
-        email = None
-        contact_address = getattr(ip_info, "contact_address", None)
-        if contact_address:
-            electronic_addresses = getattr(contact_address, "electronic_addresses", []) or []
-            if electronic_addresses:
-                electronic_address = electronic_addresses[0]
-                email = getattr(electronic_address, "email", None) or getattr(
-                    electronic_address, "electronic_address_text", None
-                )
 
-        citizenship = getattr(ip_info, "citizenship", None)
-        citizenship_id = (
-            getattr(citizenship, "country_code", None) if citizenship else None
-        )
-        citizenship_name = (
-            getattr(citizenship, "country_name", None) if citizenship else None
-        )
 
-        address_info = None
-        if contact_address:
-            mailing_addresses = getattr(contact_address, "mailing_addresses", []) or []
-            if mailing_addresses:
-                addr = mailing_addresses[0]
-                postal_code = getattr(addr, "postal_code", None)
-                zip_code = str(postal_code)[:5] if postal_code else None
 
-                address_info = {
-                    "addressId": None,
-                    "attention": getattr(ip_info, "name", None),
-                    "addressLineOne": getattr(addr, "street_line_one", None),
-                    "addressLineTwo": getattr(addr, "street_line_two", None),
-                    "city": getattr(addr, "city_name", None),
-                    "state": getattr(addr, "geographic_region_name", None),
-                    "zipCode": zip_code,
-                    "countryId": citizenship_id,
-                    "country": citizenship_name,
-                    "lockControlNumber": 1,
-                }
+payload = {
+    "assignmentId": assignment_id,
+    "formType": "TRADEMARK",
+    "receivingType": receiving_type,
+    "receivingEmail": email,
+    "citizenshipId": ReceivingPartyPayloadMapper._safe_int(citizenship_id),
+    "citizenship": citizenship_name,
+    "citizenshipStateId": None,
+    "citizenshipState": None,
+    "executionDate": datetime.utcnow().date().isoformat(),
+    "addressInfo": address_info,
+    "domesticAddressInfo": None,
+    "composedOfPartyList": [],
+}
 
-        payload = {
-            "assignmentId": assignment_id,
-            "formType": "TRADEMARK",
-            "receivingType": receiving_type,
-            "receivingEmail": email,
-            "citizenshipId": citizenship_id,
-            "citizenship": citizenship_name,
-            "citizenshipStateId": None,
-            "citizenshipState": None,
-            "executionDate": datetime.utcnow().strftime("%Y-%m-%d"),
-            "addressInfo": address_info,
-            "domesticAddressInfo": None,
-            "composedOfPartyList": [],
-        }
 
-        if receiving_type == "INDIVIDUAL":
-            first_name = getattr(ip_info, "given_name", None)
-            last_name = getattr(ip_info, "family_name", None)
-            full_name = getattr(ip_info, "name", None)
 
-            if not first_name and full_name:
-                if "," in full_name:
-                    parts = [p.strip() for p in full_name.split(",")]
-                    if len(parts) >= 2:
-                        first_name = parts[1]
-                        last_name = parts[0]
-                else:
-                    parts = full_name.split()
-                    if len(parts) == 1:
-                        first_name = parts[0]
-                        last_name = None
-                    elif len(parts) >= 2:
-                        first_name = parts[0]
-                        last_name = parts[-1]
+entity_block = {
+    "entityId": None,
+    "entityName": entity_name or "UNKNOWN ENTITY",
+    "legalEntityTypeId": 1,
+    "lockControlNumber": 1,
+}
 
-            individual_block = {
-                "individualId": None,
-                "prefix": getattr(ip_info, "prefix_name", None),
-                "firstName": first_name,
-                "middleName": getattr(ip_info, "middle_name", None),
-                "lastName": last_name,
-                "suffix": getattr(ip_info, "suffix", None),
-                "lockControlNumber": 1,
-            }
 
-            payload["representative"] = individual_block.copy()
-            payload["individual"] = individual_block.copy()
 
-        else:
-            entity_block = {
-                "entityId": None,
-                "entityName": getattr(ip_info, "name", None),
-                "legalEntityTypeId": None,
-                "lockControlNumber": 1,
-            }
 
-            payload["representative"] = entity_block.copy()
-            payload["entity"] = entity_block.copy()
 
-        return payload
+
+
