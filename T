@@ -1,5 +1,5 @@
 payload = {
-    "assignmentId": assignment_id,
+    "assignmentId": 17807,
     "formType": "TRADEMARK",
     "receivingType": "INDIVIDUAL",
     "receivingEmail": "test@test.com",
@@ -19,6 +19,15 @@ payload = {
         "zipCode": "10001",
         "countryId": 840,
         "country": "US",
+        "lockControlNumber": 1
+    },
+    "individual": {
+        "individualId": None,
+        "prefix": None,
+        "firstName": "Kim",
+        "middleName": None,
+        "lastName": "Hwi",
+        "suffix": None,
         "lockControlNumber": 1
     }
 }
