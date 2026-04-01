@@ -1,2 +1,106 @@
-party_code = getattr(ip_info, "party_code", None)
-receiving_type = "INDIVIDUAL" if party_code == "I" else "ENTITY"
+from datetime import datetime
+
+
+class ReceivingPartyPayloadMapper:
+
+    @staticmethod
+    def build_payload(owner, assignment_id):
+        """
+        Build payload ONLY for API route call (camelCase).
+        """
+
+        ip_info = getattr(owner, "ip_info", None)
+
+        # ----------------------------
+        # RECEIVING TYPE
+        # ----------------------------
+        party_code = getattr(ip_info, "party_code", None)
+        receiving_type = "INDIVIDUAL" if party_code == "I" else "ENTITY"
+
+        # ----------------------------
+        # EMAIL
+        # ----------------------------
+        email = None
+        if ip_info and getattr(ip_info, "contact_address", None):
+            electronic_addresses = getattr(ip_info.contact_address, "electronic_addresses", [])
+            if electronic_addresses:
+                email = getattr(electronic_addresses[0], "email", None)
+
+        # ----------------------------
+        # CITIZENSHIP
+        # ----------------------------
+        citizenship = getattr(ip_info, "citizenship", None)
+        citizenship_id = getattr(citizenship, "country_code", None) if citizenship else None
+        citizenship_name = getattr(citizenship, "country_name", None) if citizenship else None
+
+        # ----------------------------
+        # ADDRESS
+        # ----------------------------
+        address_info = None
+
+        if ip_info and getattr(ip_info, "contact_address", None):
+            mailing_addresses = getattr(ip_info.contact_address, "mailing_addresses", [])
+
+            if mailing_addresses:
+                addr = mailing_addresses[0]
+                postal_code = getattr(addr, "postal_code", None)
+
+                # IMPORTANT: API expects STRING, not int
+                zip_code = str(postal_code)[:5] if postal_code else None
+
+                address_info = {
+                    "addressId": None,
+                    "attention": getattr(ip_info, "name", None),
+                    "addressLineOne": getattr(addr, "street_line_one", None),
+                    "addressLineTwo": getattr(addr, "street_line_two", None),
+                    "city": getattr(addr, "city_name", None),
+                    "state": getattr(addr, "geographic_region_name", None),
+                    "zipCode": zip_code,
+                    "countryId": citizenship_id,
+                    "country": citizenship_name,
+                    "lockControlNumber": 1,
+                }
+
+        # ----------------------------
+        # BASE PAYLOAD (ROUTE FORMAT)
+        # ----------------------------
+        payload = {
+            "assignmentId": assignment_id,
+            "formType": "TRADEMARK",
+            "receivingType": receiving_type,
+            "receivingEmail": email,
+            "citizenshipId": citizenship_id,
+            "citizenship": citizenship_name,
+            "citizenshipStateId": None,
+            "citizenshipState": None,
+            "executionDate": datetime.utcnow().strftime("%Y-%m-%d"),
+            "addressInfo": address_info,
+
+            # REQUIRED BY ROUTE (DO NOT REMOVE)
+            "domesticAddressInfo": None,
+            "composedofPartyList": []
+        }
+
+        # ----------------------------
+        # NAME / REPRESENTATIVE
+        # ----------------------------
+        if receiving_type == "INDIVIDUAL":
+            payload["representative"] = {
+                "individualId": None,
+                "prefix": getattr(ip_info, "prefix_name", None),
+                "firstName": getattr(ip_info, "given_name", None) or getattr(ip_info, "name", None),
+                "middleName": getattr(ip_info, "middle_name", None),
+                "lastName": getattr(ip_info, "family_name", None),
+                "suffix": getattr(ip_info, "suffix", None),
+                "lockControlNumber": 1,
+            }
+
+        else:
+            payload["representative"] = {
+                "entityId": None,
+                "entityName": getattr(ip_info, "name", None),
+                "legalEntityTypeId": None,
+                "lockControlNumber": 1,
+            }
+
+        return payload
