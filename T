@@ -1,63 +1,281 @@
-def save_receiving_parties(self, receiving_party_data: Dict[str, Any]) -> Dict | None:
-    try:
-        domestic_individual_id = None
-        domestic_address_info_id = None
-        composed_party_response = []
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
-        # normalize camelCase -> snake_case where needed
-        if "receivingType" in receiving_party_data and "receiving_type" not in receiving_party_data:
-            receiving_party_data["receiving_type"] = receiving_party_data["receivingType"]
 
-        if "addressInfo" in receiving_party_data and "domestic_address_info" not in receiving_party_data:
-            receiving_party_data["domestic_address_info"] = receiving_party_data["addressInfo"]
+class ReceivingPartyPayloadMapper:
+    COUNTRY_ID_MAP = {
+        "US": 840,
+        "KR": 410,
+    }
 
-        if "composedPartyList" in receiving_party_data and "composed_party_list" not in receiving_party_data:
-            receiving_party_data["composed_party_list"] = receiving_party_data["composedPartyList"]
+    STATE_ID_MAP = {
+        "NY": 1,
+    }
 
-        receiving_type = receiving_party_data.get("receiving_type")
-        if not receiving_type:
-            raise ValueError("receiving_type is required")
+    @staticmethod
+    def generate_payloads(
+        owners: List[Any],
+        assignment_id: int,
+        form_type: str = "TRADEMARK",
+    ) -> List[Dict[str, Any]]:
+        payloads: List[Dict[str, Any]] = []
 
-        type_id = self.set_individual_or_entity(receiving_type, receiving_party_data)
-
-        representative_data = receiving_party_data.get("representative")
-        if representative_data:
-            domestic_individual = self.individual_repo.upsert_individual(representative_data)
-            domestic_individual_id = domestic_individual.individual_id
-
-        domestic_address_info = receiving_party_data.get("domestic_address_info")
-        if domestic_address_info:
-            domestic_address = self.address_repo.upsert_address(domestic_address_info)
-            domestic_address_info_id = domestic_address.address_id
-
-        composed_party_list = receiving_party_data.get("composed_party_list") or []
-        for composed_party in composed_party_list:
-            composed_party_type = (
-                composed_party.get("composed_party_type")
-                or composed_party.get("composedPartyType")
+        for owner in owners or []:
+            payload = ReceivingPartyPayloadMapper._map_owner(
+                owner=owner,
+                assignment_id=assignment_id,
+                form_type=form_type,
             )
-            composed_type_id = self.set_individual_or_entity(composed_party_type, composed_party)
+            if payload:
+                payloads.append(payload)
 
-            saved_composed_party = self.composed_party_repo.save_composed_party(
-                composed_party,
-                composed_type_id,
-            )
-            composed_party_response.append(saved_composed_party.to_dict())
+        return payloads
 
-        receiving_party_data["domestic_individual_id"] = domestic_individual_id
-        receiving_party_data["domestic_address_info_id"] = domestic_address_info_id
-        receiving_party_data["composed_party_list"] = composed_party_response
+    @staticmethod
+    def _map_owner(
+        owner: Any,
+        assignment_id: int,
+        form_type: str,
+    ) -> Optional[Dict[str, Any]]:
+        ip_info = ReceivingPartyPayloadMapper._get_value(owner, "ip_info", "ipInfo")
+        if not ip_info:
+            return None
 
-        receiving_party = self.receiving_party_repository.save_receiving_parties(
-            receiving_party_data,
-            type_id,
+        party_code = ReceivingPartyPayloadMapper._get_value(ip_info, "party_code", "partyCode")
+        legal_entity = ReceivingPartyPayloadMapper._get_value(
+            ip_info, "legal_entity", "legalEntity"
+        )
+        full_name = ReceivingPartyPayloadMapper._get_value(ip_info, "name")
+        given_name = ReceivingPartyPayloadMapper._get_value(ip_info, "given_name", "givenName")
+        family_name = ReceivingPartyPayloadMapper._get_value(ip_info, "family_name", "familyName")
+        middle_name = ReceivingPartyPayloadMapper._get_value(ip_info, "middle_name", "middleName")
+        prefix_name = ReceivingPartyPayloadMapper._get_value(ip_info, "prefix_name", "prefixName")
+        suffix = ReceivingPartyPayloadMapper._get_value(ip_info, "suffix")
+
+        first_name, last_name = ReceivingPartyPayloadMapper._derive_names(
+            given_name=given_name,
+            family_name=family_name,
+            full_name=full_name,
         )
 
-        if isinstance(receiving_party, dict):
-            receiving_party["composed_party_list"] = composed_party_response
+        citizenship_obj = ReceivingPartyPayloadMapper._get_value(ip_info, "citizenship")
+        country_code = ReceivingPartyPayloadMapper._get_value(
+            citizenship_obj, "country_code", "countryCode"
+        )
+        country_name = ReceivingPartyPayloadMapper._get_value(
+            citizenship_obj, "country_name", "countryName"
+        )
 
-        return receiving_party
+        # If your API uses different reference IDs, update these maps.
+        citizenship_id = ReceivingPartyPayloadMapper._to_int_or_default(
+            country_code,
+            ReceivingPartyPayloadMapper.COUNTRY_ID_MAP.get(country_code, 840),
+        )
 
-    except Exception as e:
-        logger.error(f"unable to save receiving parties due to {e}")
-        raise
+        citizenship_state_id = ReceivingPartyPayloadMapper._get_state_id(ip_info)
+
+        citizenship_state = ReceivingPartyPayloadMapper._get_state_text(ip_info) or "NY"
+
+        email = ReceivingPartyPayloadMapper._get_email(ip_info) or "test@test.com"
+
+        address_info = ReceivingPartyPayloadMapper._build_address_info(
+            ip_info=ip_info,
+            default_country_id=citizenship_id,
+            default_country=country_name or country_code or "US",
+            default_state_id=citizenship_state_id,
+            default_state=citizenship_state,
+        )
+
+        payload: Dict[str, Any] = {
+            "assignmentId": assignment_id,
+            "formType": form_type,
+            "receivingType": "INDIVIDUAL" if party_code == "I" else "ENTITY",
+            "receivingEmail": email,
+            "citizenshipId": citizenship_id,
+            "citizenship": country_name or country_code or "US",
+            "citizenshipStateId": citizenship_state_id,
+            "citizenshipState": citizenship_state,
+            "executionDate": datetime.utcnow().strftime("%Y-%m-%d"),
+            "addressInfo": address_info,
+        }
+
+        if party_code == "I":
+            payload["individual"] = {
+                "individualId": None,
+                "prefix": prefix_name,
+                "firstName": first_name or "Unknown",
+                "middleName": middle_name,
+                "lastName": last_name or "Unknown",
+                "suffix": suffix,
+                "lockControlNumber": 1,
+            }
+        else:
+            payload["entity"] = {
+                "entityId": None,
+                "entityName": full_name or "Unknown Entity",
+                "legalEntityTypeId": legal_entity,
+                "lockControlNumber": 1,
+            }
+
+        return payload
+
+    @staticmethod
+    def _build_address_info(
+        ip_info: Any,
+        default_country_id: int,
+        default_country: str,
+        default_state_id: int,
+        default_state: str,
+    ) -> Dict[str, Any]:
+        contact_address = ReceivingPartyPayloadMapper._get_value(
+            ip_info, "contact_address", "contactAddress"
+        )
+        mailing_addresses = ReceivingPartyPayloadMapper._get_value(
+            contact_address, "mailing_addresses", "mailingAddresses"
+        ) or []
+
+        first_mailing = mailing_addresses[0] if mailing_addresses else None
+
+        address_line_one = ReceivingPartyPayloadMapper._get_value(
+            first_mailing, "street_address_line_text", "streetAddressLineText"
+        ) or ReceivingPartyPayloadMapper._get_value(
+            first_mailing, "address_line_one", "addressLineOne"
+        ) or "123 Main St"
+
+        address_line_two = ReceivingPartyPayloadMapper._get_value(
+            first_mailing, "free_format_address", "freeFormatAddress"
+        ) or ReceivingPartyPayloadMapper._get_value(
+            first_mailing, "address_line_two", "addressLineTwo"
+        )
+
+        city = ReceivingPartyPayloadMapper._get_value(
+            first_mailing, "city_name", "cityName"
+        ) or "New York"
+
+        state_code = ReceivingPartyPayloadMapper._get_value(
+            first_mailing, "state_geo_code", "stateGeoCode"
+        ) or default_state
+
+        state_id = ReceivingPartyPayloadMapper._to_int_or_default(
+            state_code,
+            ReceivingPartyPayloadMapper.STATE_ID_MAP.get(state_code, default_state_id),
+        )
+
+        zip_code = ReceivingPartyPayloadMapper._get_value(
+            first_mailing, "postal_code", "postalCode"
+        ) or "10001"
+
+        country_code = ReceivingPartyPayloadMapper._get_value(
+            first_mailing, "country_code", "countryCode"
+        )
+        country_name = ReceivingPartyPayloadMapper._get_value(
+            first_mailing, "country_name", "countryName"
+        )
+
+        country_id = ReceivingPartyPayloadMapper._to_int_or_default(
+            country_code,
+            ReceivingPartyPayloadMapper.COUNTRY_ID_MAP.get(country_code, default_country_id),
+        )
+
+        return {
+            "addressId": None,
+            "attention": "Test Receiver",
+            "addressLineOne": address_line_one,
+            "addressLineTwo": address_line_two,
+            "city": city,
+            "stateId": state_id,
+            "state": state_code or default_state,
+            "zipCode": zip_code,
+            "countryId": country_id,
+            "country": country_name or country_code or default_country,
+            "lockControlNumber": 1,
+        }
+
+    @staticmethod
+    def _get_email(ip_info: Any) -> Optional[str]:
+        contact_address = ReceivingPartyPayloadMapper._get_value(
+            ip_info, "contact_address", "contactAddress"
+        )
+        electronic_addresses = ReceivingPartyPayloadMapper._get_value(
+            contact_address, "electronic_address", "electronicAddress"
+        ) or []
+
+        first_email = electronic_addresses[0] if electronic_addresses else None
+
+        return (
+            ReceivingPartyPayloadMapper._get_value(
+                first_email, "electronic_address_text", "electronicAddressText"
+            )
+            or ReceivingPartyPayloadMapper._get_value(first_email, "email")
+        )
+
+    @staticmethod
+    def _get_state_id(ip_info: Any) -> int:
+        citizenship_obj = ReceivingPartyPayloadMapper._get_value(ip_info, "citizenship")
+        state_code = ReceivingPartyPayloadMapper._get_value(
+            citizenship_obj, "state_geo_code", "stateGeoCode"
+        )
+        return ReceivingPartyPayloadMapper._to_int_or_default(
+            state_code,
+            ReceivingPartyPayloadMapper.STATE_ID_MAP.get(state_code, 1),
+        )
+
+    @staticmethod
+    def _get_state_text(ip_info: Any) -> Optional[str]:
+        citizenship_obj = ReceivingPartyPayloadMapper._get_value(ip_info, "citizenship")
+        return (
+            ReceivingPartyPayloadMapper._get_value(
+                citizenship_obj, "geographic_region_name", "geographicRegionName"
+            )
+            or ReceivingPartyPayloadMapper._get_value(
+                citizenship_obj, "state_geo_code", "stateGeoCode"
+            )
+        )
+
+    @staticmethod
+    def _derive_names(
+        given_name: Optional[str],
+        family_name: Optional[str],
+        full_name: Optional[str],
+    ) -> tuple[Optional[str], Optional[str]]:
+        if given_name:
+            return given_name, family_name
+
+        if not full_name:
+            return None, None
+
+        if "," in full_name:
+            parts = [p.strip() for p in full_name.split(",") if p.strip()]
+            if len(parts) >= 2:
+                return parts[1], parts[0]
+
+        parts = [p.strip() for p in full_name.split() if p.strip()]
+        if len(parts) >= 2:
+            return " ".join(parts[:-1]), parts[-1]
+
+        return full_name, full_name
+
+    @staticmethod
+    def _to_int_or_default(value: Any, default: int) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _get_value(obj: Any, *names: str) -> Any:
+        if obj is None:
+            return None
+
+        for name in names:
+            if isinstance(obj, dict) and name in obj:
+                return obj.get(name)
+
+            if hasattr(obj, name):
+                return getattr(obj, name)
+
+            unknown_fields = getattr(obj, "unknown_fields", None)
+            if isinstance(unknown_fields, dict) and name in unknown_fields:
+                return unknown_fields.get(name)
+
+        return None
