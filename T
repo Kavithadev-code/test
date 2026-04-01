@@ -1,5 +1,5 @@
 payload = {
-    "assignmentId": 17804,
+    "assignmentId": assignment_id,
     "formType": "TRADEMARK",
     "receivingType": "INDIVIDUAL",
     "receivingEmail": "test@test.com",
@@ -15,24 +15,10 @@ payload = {
         "addressLineTwo": None,
         "city": "New York",
         "stateId": 1,
+        "state": "NY",
         "zipcode": "10001",
         "countryId": 840,
-        "lockControlNumber": 1
-    }
-}
-
-print(json.dumps(payload, indent=2))
-
-receiving_response = requests.post(
-    url=receiving_url,
-    json=payload,
-    headers={
-        "Content-Type": "application/json",
-        "Accept": "application/json",
+        "country": "US",
+        "lockControlNumber": 1,
     },
-    verify=False,
-    timeout=60,
-)
-
-print(receiving_response.status_code)
-print(receiving_response.text)
+}
