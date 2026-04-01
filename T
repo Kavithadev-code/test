@@ -1,18 +1,38 @@
-{
-  "assignmentId": 17802,
-  "formType": "TRADEMARK",
-  "receivingType": "INDIVIDUAL",
-  "receivingEmail": "test@test.com",
-  "citizenshipId": 840,
-  "citizenshipStateId": 1,
-  "citizenshipState": "US",
-  "executionDate": "2026-04-01",
-  "addressInfo": {
-    "address1": "123 Main St",
-    "city": "New York",
-    "state": "NY",
-    "zip": "10001",
-    "country": "US",
-    "lockControlNumber": 1
-  }
+payload = {
+    "assignmentId": 17804,
+    "formType": "TRADEMARK",
+    "receivingType": "INDIVIDUAL",
+    "receivingEmail": "test@test.com",
+    "citizenshipId": 840,
+    "citizenship": "US",
+    "citizenshipStateId": 1,
+    "citizenshipState": "NY",
+    "executionDate": "2026-04-01",
+    "addressInfo": {
+        "addressId": None,
+        "attention": "Test Receiver",
+        "addressLineOne": "123 Main St",
+        "addressLineTwo": None,
+        "city": "New York",
+        "stateId": 1,
+        "zipcode": "10001",
+        "countryId": 840,
+        "lockControlNumber": 1
+    }
 }
+
+print(json.dumps(payload, indent=2))
+
+receiving_response = requests.post(
+    url=receiving_url,
+    json=payload,
+    headers={
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    },
+    verify=False,
+    timeout=60,
+)
+
+print(receiving_response.status_code)
+print(receiving_response.text)
