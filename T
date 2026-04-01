@@ -1,33 +1,63 @@
-payload = {
-    "assignmentId": 17807,
-    "formType": "TRADEMARK",
-    "receivingType": "INDIVIDUAL",
-    "receivingEmail": "test@test.com",
-    "citizenshipId": 840,
-    "citizenship": "US",
-    "citizenshipStateId": 1,
-    "citizenshipState": "NY",
-    "executionDate": "2026-04-01",
-    "addressInfo": {
-        "addressId": None,
-        "attention": "Test Receiver",
-        "addressLineOne": "123 Main St",
-        "addressLineTwo": None,
-        "city": "New York",
-        "stateId": 1,
-        "state": "NY",
-        "zipCode": "10001",
-        "countryId": 840,
-        "country": "US",
-        "lockControlNumber": 1
-    },
-    "individual": {
-        "individualId": None,
-        "prefix": None,
-        "firstName": "Kim",
-        "middleName": None,
-        "lastName": "Hwi",
-        "suffix": None,
-        "lockControlNumber": 1
-    }
-}
+def save_receiving_parties(self, receiving_party_data: Dict[str, Any]) -> Dict | None:
+    try:
+        domestic_individual_id = None
+        domestic_address_info_id = None
+        composed_party_response = []
+
+        # normalize camelCase -> snake_case where needed
+        if "receivingType" in receiving_party_data and "receiving_type" not in receiving_party_data:
+            receiving_party_data["receiving_type"] = receiving_party_data["receivingType"]
+
+        if "addressInfo" in receiving_party_data and "domestic_address_info" not in receiving_party_data:
+            receiving_party_data["domestic_address_info"] = receiving_party_data["addressInfo"]
+
+        if "composedPartyList" in receiving_party_data and "composed_party_list" not in receiving_party_data:
+            receiving_party_data["composed_party_list"] = receiving_party_data["composedPartyList"]
+
+        receiving_type = receiving_party_data.get("receiving_type")
+        if not receiving_type:
+            raise ValueError("receiving_type is required")
+
+        type_id = self.set_individual_or_entity(receiving_type, receiving_party_data)
+
+        representative_data = receiving_party_data.get("representative")
+        if representative_data:
+            domestic_individual = self.individual_repo.upsert_individual(representative_data)
+            domestic_individual_id = domestic_individual.individual_id
+
+        domestic_address_info = receiving_party_data.get("domestic_address_info")
+        if domestic_address_info:
+            domestic_address = self.address_repo.upsert_address(domestic_address_info)
+            domestic_address_info_id = domestic_address.address_id
+
+        composed_party_list = receiving_party_data.get("composed_party_list") or []
+        for composed_party in composed_party_list:
+            composed_party_type = (
+                composed_party.get("composed_party_type")
+                or composed_party.get("composedPartyType")
+            )
+            composed_type_id = self.set_individual_or_entity(composed_party_type, composed_party)
+
+            saved_composed_party = self.composed_party_repo.save_composed_party(
+                composed_party,
+                composed_type_id,
+            )
+            composed_party_response.append(saved_composed_party.to_dict())
+
+        receiving_party_data["domestic_individual_id"] = domestic_individual_id
+        receiving_party_data["domestic_address_info_id"] = domestic_address_info_id
+        receiving_party_data["composed_party_list"] = composed_party_response
+
+        receiving_party = self.receiving_party_repository.save_receiving_parties(
+            receiving_party_data,
+            type_id,
+        )
+
+        if isinstance(receiving_party, dict):
+            receiving_party["composed_party_list"] = composed_party_response
+
+        return receiving_party
+
+    except Exception as e:
+        logger.error(f"unable to save receiving parties due to {e}")
+        raise
