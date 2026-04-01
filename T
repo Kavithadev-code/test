@@ -1,44 +1,18 @@
-import json
-import requests
-import urllib3
-
-from src.service.madrid.receiving_party_payload_mapper import ReceivingPartyPayloadMapper
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-# assignment create already done above
-assignment_id = (
-    assignment_json.get("successResponse", {})
-    .get("data", {})
-    .get("assignmentId")
-)
-
-if not assignment_id:
-    raise Exception("assignmentId not found in create assignment response")
-
-receiving_url = env_config.get("RECEIVING_URL")
-
-receiving_payloads = ReceivingPartyPayloadMapper.generate_payloads(
-    owners=receiving_parties,
-    assignment_id=assignment_id,
-    form_type="TRADEMARK",
-)
-
-for payload in receiving_payloads:
-    print("RECEIVING PAYLOAD")
-    print(json.dumps(payload, indent=2, default=str))
-
-    receiving_response = requests.post(
-        url=receiving_url,
-        json=payload,
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
-        verify=False,
-        timeout=60,
-    )
-
-    print("RECEIVING STATUS:", receiving_response.status_code)
-    print("RECEIVING RESPONSE:", receiving_response.text)
-    receiving_response.raise_for_status()
+{
+  "assignmentId": 17802,
+  "formType": "TRADEMARK",
+  "receivingType": "INDIVIDUAL",
+  "receivingEmail": "test@test.com",
+  "citizenshipId": 840,
+  "citizenshipStateId": 1,
+  "citizenshipState": "US",
+  "executionDate": "2026-04-01",
+  "addressInfo": {
+    "address1": "123 Main St",
+    "city": "New York",
+    "state": "NY",
+    "zip": "10001",
+    "country": "US",
+    "lockControlNumber": 1
+  }
+}
