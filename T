@@ -1,20 +1,38 @@
-if receiving_type == "INDIVIDUAL":
-    first_name, last_name = ReceivingPartyPayloadMapper._derive_names(
-        getattr(ip_info, "given_name", None),
-        getattr(ip_info, "family_name", None),
-        getattr(ip_info, "name", None),
-    )
-
-    # ✅ HARD GUARANTEE VALUES
-    first_name = first_name or "UNKNOWN"
-    last_name = last_name or "UNKNOWN"
-
-    payload["representative"] = {
-        "individualId": 1,   # REQUIRED → cannot be None
-        "prefix": getattr(ip_info, "prefix_name", None),
-        "firstName": first_name,
-        "middleName": getattr(ip_info, "middle_name", None),
-        "lastName": last_name,
-        "suffix": getattr(ip_info, "suffix", None),
-        "lockControlNumber": 1,
+payload = {
+    "assignmentId": 17804,
+    "formType": "TRADEMARK",
+    "receivingType": "INDIVIDUAL",
+    "receivingEmail": "test@test.com",
+    "citizenshipId": 840,
+    "citizenship": "US",
+    "citizenshipStateId": 1,
+    "citizenshipState": "NY",
+    "executionDate": "2026-04-01",
+    "addressInfo": {
+        "addressId": None,
+        "attention": "Test Receiver",
+        "addressLineOne": "123 Main St",
+        "addressLineTwo": None,
+        "city": "New York",
+        "stateId": 1,
+        "zipcode": "10001",
+        "countryId": 840,
+        "lockControlNumber": 1
     }
+}
+
+print(json.dumps(payload, indent=2))
+
+receiving_response = requests.post(
+    url=receiving_url,
+    json=payload,
+    headers={
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    },
+    verify=False,
+    timeout=60,
+)
+
+print(receiving_response.status_code)
+print(receiving_response.text)
