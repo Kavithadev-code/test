@@ -5,14 +5,14 @@ from typing import Any, Dict, List, Optional
 class ReceivingPartyPayloadMapper:
     @staticmethod
     def generate_payloads(
-        owners: List[Any],
+        receiving_parties: List[Any],
         assignment_id: int,
         form_type: str = "TRADEMARK",
     ) -> List[Dict[str, Any]]:
         payloads: List[Dict[str, Any]] = []
 
-        for owner in owners or []:
-            payload = ReceivingPartyPayloadMapper._map_owner(
+        for owner in receiving_parties or []:
+            payload = ReceivingPartyPayloadMapper._build_payload(
                 owner=owner,
                 assignment_id=assignment_id,
                 form_type=form_type,
@@ -23,262 +23,153 @@ class ReceivingPartyPayloadMapper:
         return payloads
 
     @staticmethod
-    def _map_owner(
+    def _build_payload(
         owner: Any,
         assignment_id: int,
         form_type: str,
     ) -> Optional[Dict[str, Any]]:
-        ip_info = ReceivingPartyPayloadMapper._get_value(owner, "ip_info", "ipInfo")
+        ip_info = getattr(owner, "ip_info", None)
         if not ip_info:
             return None
 
-        party_code = ReceivingPartyPayloadMapper._get_value(ip_info, "party_code", "partyCode")
-        legal_entity = ReceivingPartyPayloadMapper._safe_int(
-            ReceivingPartyPayloadMapper._get_value(ip_info, "legal_entity", "legalEntity")
+        party_code = getattr(ip_info, "party_code", None)
+        receiving_type = "INDIVIDUAL" if party_code == "I" else "ENTITY"
+
+        contact_address = getattr(ip_info, "contact_address", None)
+        mailing_addresses = getattr(contact_address, "mailing_addresses", None) if contact_address else None
+        electronic_addresses = getattr(contact_address, "electronic_addresses", None) if contact_address else None
+        citizenship = getattr(ip_info, "citizenship", None)
+
+        mailing_address = mailing_addresses[0] if mailing_addresses else None
+        electronic_address = electronic_addresses[0] if electronic_addresses else None
+
+        if not mailing_address:
+            raise ValueError("mailing_address missing for receiving party")
+
+        receiving_email = (
+            getattr(electronic_address, "electronic_address_text", None)
+            or getattr(electronic_address, "email", None)
+            or "test@test.com"
         )
 
-        full_name = ReceivingPartyPayloadMapper._get_value(ip_info, "name")
-        given_name = ReceivingPartyPayloadMapper._get_value(ip_info, "given_name", "givenName")
-        family_name = ReceivingPartyPayloadMapper._get_value(ip_info, "family_name", "familyName")
-        middle_name = ReceivingPartyPayloadMapper._get_value(ip_info, "middle_name", "middleName")
-        prefix_name = ReceivingPartyPayloadMapper._get_value(ip_info, "prefix_name", "prefixName")
-        suffix = ReceivingPartyPayloadMapper._get_value(ip_info, "suffix")
-
-        first_name, last_name = ReceivingPartyPayloadMapper._derive_names(
-            given_name=given_name,
-            family_name=family_name,
-            full_name=full_name,
-        )
-
-        citizenship_obj = ReceivingPartyPayloadMapper._get_value(ip_info, "citizenship")
         citizenship_id = ReceivingPartyPayloadMapper._safe_int(
-            ReceivingPartyPayloadMapper._get_value(
-                citizenship_obj,
-                "country_id",
-                "countryId",
-                "country_code",
-                "countryCode",
-            )
+            getattr(citizenship, "country_id", None) or getattr(citizenship, "country_code", None)
         )
-        citizenship = ReceivingPartyPayloadMapper._get_value(
-            citizenship_obj,
-            "country_name",
-            "countryName",
+        citizenship_name = (
+            getattr(citizenship, "country_name", None)
+            or getattr(citizenship, "country_code", None)
         )
 
         citizenship_state_id = ReceivingPartyPayloadMapper._safe_int(
-            ReceivingPartyPayloadMapper._get_value(
-                citizenship_obj,
-                "state_id",
-                "stateId",
-                "state_geo_code",
-                "stateGeoCode",
-            )
+            getattr(citizenship, "state_id", None) or getattr(citizenship, "state_geo_code", None)
         )
-        citizenship_state = ReceivingPartyPayloadMapper._get_value(
-            citizenship_obj,
-            "geographic_region_name",
-            "geographicRegionName",
-            "state_name",
-            "stateName",
-            "state_geo_code",
-            "stateGeoCode",
+        citizenship_state = (
+            getattr(citizenship, "geographic_region_name", None)
+            or getattr(citizenship, "state_name", None)
+            or getattr(citizenship, "state_geo_code", None)
         )
 
-        if citizenship_id is None:
-            raise ValueError("citizenshipId missing from Madrid input")
-
-        if citizenship_state_id is None:
-            raise ValueError("citizenshipStateId missing from Madrid input")
-
-        if not citizenship:
-            raise ValueError("citizenship missing from Madrid input")
-
-        if not citizenship_state:
-            raise ValueError("citizenshipState missing from Madrid input")
-
-        email = ReceivingPartyPayloadMapper._get_email(ip_info)
-        if not email:
-            raise ValueError("receivingEmail missing from Madrid input")
-
-        address_info = ReceivingPartyPayloadMapper._build_address_info(
-            ip_info=ip_info,
+        postal_code = getattr(mailing_address, "postal_code", None)
+        zip_code = ReceivingPartyPayloadMapper._safe_int(
+            ReceivingPartyPayloadMapper._first_five_digits(postal_code)
         )
+
+        address_info = {
+            "addressId": None,
+            "attention": None,
+            "addressLineOne": (
+                getattr(mailing_address, "street_line_one", None)
+                or getattr(mailing_address, "street_address_line_text", None)
+            ),
+            "addressLineTwo": (
+                getattr(mailing_address, "street_line_two", None)
+                or getattr(mailing_address, "free_format_address", None)
+            ),
+            "city": getattr(mailing_address, "city_name", None),
+            "stateId": ReceivingPartyPayloadMapper._safe_int(
+                getattr(mailing_address, "state_id", None)
+                or getattr(mailing_address, "state_geo_code", None)
+            ),
+            "state": (
+                getattr(mailing_address, "geographic_region_name", None)
+                or getattr(mailing_address, "state_name", None)
+                or getattr(mailing_address, "state_geo_code", None)
+            ),
+            "zipCode": zip_code,
+            "countryId": ReceivingPartyPayloadMapper._safe_int(
+                getattr(mailing_address, "country_id", None)
+                or getattr(mailing_address, "country_code", None)
+            ),
+            "country": (
+                getattr(mailing_address, "country_name", None)
+                or getattr(mailing_address, "country_code", None)
+            ),
+            "lockControlNumber": 1,
+        }
 
         payload: Dict[str, Any] = {
             "assignmentId": assignment_id,
             "formType": form_type,
-            "receivingType": "INDIVIDUAL" if party_code == "I" else "ENTITY",
-            "receivingEmail": email,
+            "receivingType": receiving_type,
+            "receivingEmail": receiving_email,
             "citizenshipId": citizenship_id,
-            "citizenship": citizenship,
+            "citizenship": citizenship_name,
             "citizenshipStateId": citizenship_state_id,
             "citizenshipState": citizenship_state,
             "executionDate": datetime.utcnow().strftime("%Y-%m-%d"),
             "addressInfo": address_info,
         }
 
-        if party_code == "I":
+        if receiving_type == "INDIVIDUAL":
+            first_name, last_name = ReceivingPartyPayloadMapper._derive_names(
+                given_name=getattr(ip_info, "given_name", None),
+                family_name=getattr(ip_info, "family_name", None),
+                full_name=getattr(ip_info, "name", None),
+            )
+
             payload["individual"] = {
                 "individualId": None,
-                "prefix": prefix_name,
-                "firstName": first_name or "Unknown",
-                "middleName": middle_name,
-                "lastName": last_name or "Unknown",
-                "suffix": suffix,
+                "prefix": getattr(ip_info, "prefix_name", None),
+                "firstName": first_name,
+                "middleName": getattr(ip_info, "middle_name", None),
+                "lastName": last_name,
+                "suffix": getattr(ip_info, "suffix", None),
                 "lockControlNumber": 1,
             }
         else:
             payload["entity"] = {
                 "entityId": None,
-                "entityName": full_name or "Unknown Entity",
-                "legalEntityTypeId": legal_entity,
+                "entityName": getattr(ip_info, "name", None),
+                "legalEntityTypeId": ReceivingPartyPayloadMapper._safe_int(
+                    getattr(ip_info, "legal_entity", None)
+                ),
                 "lockControlNumber": 1,
             }
 
         return payload
 
     @staticmethod
-    def _build_address_info(ip_info: Any) -> Dict[str, Any]:
-        contact_address = ReceivingPartyPayloadMapper._get_value(
-            ip_info, "contact_address", "contactAddress"
-        )
-        mailing_addresses = ReceivingPartyPayloadMapper._get_value(
-            contact_address, "mailing_addresses", "mailingAddresses"
-        ) or []
-
-        first_mailing = mailing_addresses[0] if mailing_addresses else None
-        if not first_mailing:
-            raise ValueError("mailing address missing from Madrid input")
-
-        address_id = ReceivingPartyPayloadMapper._safe_int(
-            ReceivingPartyPayloadMapper._get_value(
-                first_mailing, "address_id", "addressId"
-            ),
-            allow_none=True,
-        )
-
-        address_line_one = ReceivingPartyPayloadMapper._get_value(
-            first_mailing,
-            "street_address_line_text",
-            "streetAddressLineText",
-            "address_line_one",
-            "addressLineOne",
-        )
-        address_line_two = ReceivingPartyPayloadMapper._get_value(
-            first_mailing,
-            "free_format_address",
-            "freeFormatAddress",
-            "address_line_two",
-            "addressLineTwo",
-        )
-
-        city = ReceivingPartyPayloadMapper._get_value(
-            first_mailing, "city_name", "cityName"
-        )
-
-        state_id = ReceivingPartyPayloadMapper._safe_int(
-            ReceivingPartyPayloadMapper._get_value(
-                first_mailing,
-                "state_id",
-                "stateId",
-                "state_geo_code",
-                "stateGeoCode",
-            )
-        )
-        state = ReceivingPartyPayloadMapper._get_value(
-            first_mailing,
-            "state_name",
-            "stateName",
-            "state_geo_code",
-            "stateGeoCode",
-            "geographic_region_name",
-            "geographicRegionName",
-        )
-
-        zip_code = ReceivingPartyPayloadMapper._safe_int(
-            ReceivingPartyPayloadMapper._get_value(
-                first_mailing,
-                "postal_code",
-                "postalCode",
-                "zip_code",
-                "zipCode",
-            )
-        )
-
-        country_id = ReceivingPartyPayloadMapper._safe_int(
-            ReceivingPartyPayloadMapper._get_value(
-                first_mailing,
-                "country_id",
-                "countryId",
-                "country_code",
-                "countryCode",
-            )
-        )
-        country = ReceivingPartyPayloadMapper._get_value(
-            first_mailing,
-            "country_name",
-            "countryName",
-        )
-
-        if not address_line_one:
-            raise ValueError("addressLineOne missing from Madrid input")
-
-        if not city:
-            raise ValueError("city missing from Madrid input")
-
-        if state_id is None:
-            raise ValueError("stateId missing from Madrid input")
-
-        if not state:
-            raise ValueError("state missing from Madrid input")
-
-        if zip_code is None:
-            raise ValueError("zipCode missing from Madrid input")
-
-        if country_id is None:
-            raise ValueError("countryId missing from Madrid input")
-
-        if not country:
-            raise ValueError("country missing from Madrid input")
-
-        return {
-            "addressId": address_id,
-            "attention": "Test Receiver",
-            "addressLineOne": address_line_one,
-            "addressLineTwo": address_line_two,
-            "city": city,
-            "stateId": state_id,
-            "state": state,
-            "zipCode": zip_code,
-            "countryId": country_id,
-            "country": country,
-            "lockControlNumber": 1,
-        }
+    def _first_five_digits(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        digits = "".join(ch for ch in str(value) if ch.isdigit())
+        return digits[:5] if digits else None
 
     @staticmethod
-    def _get_email(ip_info: Any) -> Optional[str]:
-        contact_address = ReceivingPartyPayloadMapper._get_value(
-            ip_info, "contact_address", "contactAddress"
-        )
-        electronic_addresses = ReceivingPartyPayloadMapper._get_value(
-            contact_address, "electronic_address", "electronicAddress"
-        ) or []
-
-        first_email = electronic_addresses[0] if electronic_addresses else None
-
-        return ReceivingPartyPayloadMapper._get_value(
-            first_email,
-            "electronic_address_text",
-            "electronicAddressText",
-            "email",
-        )
+    def _safe_int(value: Any) -> Optional[int]:
+        try:
+            if value is None:
+                return None
+            digits = "".join(ch for ch in str(value) if ch.isdigit())
+            return int(digits) if digits else None
+        except (TypeError, ValueError):
+            return None
 
     @staticmethod
     def _derive_names(
-        given_name: Optional[str],
-        family_name: Optional[str],
-        full_name: Optional[str],
+        given_name: Optional[str] = None,
+        family_name: Optional[str] = None,
+        full_name: Optional[str] = None,
     ) -> tuple[Optional[str], Optional[str]]:
         if given_name:
             return given_name, family_name
@@ -296,30 +187,3 @@ class ReceivingPartyPayloadMapper:
             return " ".join(parts[:-1]), parts[-1]
 
         return full_name, full_name
-
-    @staticmethod
-    def _safe_int(value: Any, default: Optional[int] = None, allow_none: bool = False) -> Optional[int]:
-        if value is None and allow_none:
-            return None
-        try:
-            return int(str(value).strip())
-        except (TypeError, ValueError):
-            return default
-
-    @staticmethod
-    def _get_value(obj: Any, *names: str) -> Any:
-        if obj is None:
-            return None
-
-        for name in names:
-            if isinstance(obj, dict) and name in obj:
-                return obj.get(name)
-
-            if hasattr(obj, name):
-                return getattr(obj, name)
-
-            unknown_fields = getattr(obj, "unknown_fields", None)
-            if isinstance(unknown_fields, dict) and name in unknown_fields:
-                return unknown_fields.get(name)
-
-        return None
