@@ -16,9 +16,9 @@ payload = {
         "city": "New York",
         "stateId": 1,
         "state": "NY",
-        "zipcode": "10001",
+        "zipCode": "10001",
         "countryId": 840,
         "country": "US",
-        "lockControlNumber": 1,
-    },
+        "lockControlNumber": 1
+    }
 }
