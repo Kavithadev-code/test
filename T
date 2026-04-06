@@ -1,109 +1,33 @@
-from datetime import datetime
-
-
-class ConveyingPartyPayloadMapper:
-    @staticmethod
-    def generate_payloads(owners, assignment_id):
-        payloads = []
-
-        for owner in owners or []:
-            payload = ConveyingPartyPayloadMapper.build_payload(owner, assignment_id)
-            if payload:
-                payloads.append(payload)
-
-        return payloads
+class CorrespondencePayloadMapper:
 
     @staticmethod
-    def build_payload(owner, assignment_id):
-        ip_info = getattr(owner, "ip_info", None) or owner
-        if not ip_info:
-            return None
-
-        party_code = (
-            getattr(ip_info, "party_code", None)
-            or getattr(owner, "party_code", None)
-        )
-        conveying_type = "INDIVIDUAL" if party_code == "I" else "ENTITY"
-
-        citizenship = getattr(ip_info, "citizenship", None)
-        citizenship_id = ConveyingPartyPayloadMapper._safe_int(
-            getattr(citizenship, "country_id", None)
-            or getattr(citizenship, "country_code", None)
-        ) or 1
-        citizenship_name = (
-            getattr(citizenship, "country_name", None)
-            or getattr(citizenship, "country_code", None)
-            or "UNKNOWN"
-        )
+    def from_receiving_payload(receiving_payload: dict, assignment_id: int):
+        individual = receiving_payload.get("individual", {})
+        address = receiving_payload.get("addressInfo", {})
 
         payload = {
-            "conveyingPartyId": None,
             "assignmentId": assignment_id,
-            "conveyingType": conveying_type,
-            "executionDate": datetime.utcnow().date().isoformat(),
-            "citizenship": citizenship_name,
-            "citizenshipId": citizenship_id,
-            "citizenshipStateId": 1,
-            "citizenshipState": "UNKNOWN",
-            "isMergedEntity": 0,
-            "lockControlNumber": 1,
+            "correspondentInfo": {
+                "name": {
+                    "firstName": individual.get("firstName"),
+                    "lastName": individual.get("lastName"),
+                    "middleName": individual.get("middleName"),
+                    "prefix": individual.get("prefix"),
+                    "suffix": individual.get("suffix"),
+                },
+                "addressInfo": {
+                    "addressLineOne": address.get("addressLineOne"),
+                    "addressLineTwo": address.get("addressLineTwo"),
+                    "attention": address.get("attention"),
+                    "city": address.get("city"),
+                    "state": address.get("state"),
+                    "country": address.get("country"),
+                    "countryId": address.get("countryId"),
+                    "zipCode": address.get("zipCode"),
+                },
+                "phones": receiving_payload.get("phones", []),
+                "emails": receiving_payload.get("emails", [])
+            }
         }
 
-        if conveying_type == "INDIVIDUAL":
-            first_name, last_name = ConveyingPartyPayloadMapper._derive_names(
-                getattr(ip_info, "given_name", None),
-                getattr(ip_info, "family_name", None),
-                getattr(ip_info, "name", None),
-            )
-
-            payload["individual"] = {
-                "individualId": None,
-                "prefix": getattr(ip_info, "prefix_name", None),
-                "firstName": first_name or "UNKNOWN",
-                "middleName": getattr(ip_info, "middle_name", None),
-                "lastName": last_name or "UNKNOWN",
-                "suffix": getattr(ip_info, "suffix", None),
-                "lockControlNumber": 1,
-            }
-
-        else:
-            payload["entity"] = {
-                "entity_id": None,
-                "entity_name": getattr(ip_info, "name", None) or "UNKNOWN ENTITY",
-                "formerly": None,
-                "formerly_name": None,
-                "assumed_name_type": None,
-                "other_name": None,
-                "fk_legal_entity_type_id": ConveyingPartyPayloadMapper._safe_int(
-                    getattr(ip_info, "legal_entity", None)
-                ) or 1,
-                "lock_control_number": 1,
-            }
-
         return payload
-
-    @staticmethod
-    def _derive_names(given_name, family_name, full_name):
-        if given_name or family_name:
-            return given_name, family_name
-
-        if not full_name:
-            return None, None
-
-        parts = [p.strip() for p in str(full_name).replace(",", " ").split() if p.strip()]
-        if len(parts) == 1:
-            return parts[0], parts[0]
-        if len(parts) >= 2:
-            return parts[0], parts[-1]
-
-        return None, None
-
-    @staticmethod
-    def _safe_int(value):
-        try:
-            if value is None or value == "":
-                return None
-            digits = "".join(ch for ch in str(value) if ch.isdigit())
-            return int(digits) if digits else None
-        except Exception:
-            return None
