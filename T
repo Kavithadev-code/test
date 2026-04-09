@@ -1,8 +1,30 @@
-class SaveAssignmentDetailsRequestSchema(Schema):
-    assignment_payload = Nested(AssignmentRequestSchema, required=True)
-    trademark_property_payload = Nested(SaveRequestSchemaNoAssignmentId, required=True)
-    receiving_payloads = List(Nested(ReceivingTrademarkRequestSchema), required=False, allow_none=True)
-    conveying_payloads = List(Nested(ConveyingTrademarkRequestSchema), required=False, allow_none=True)
+@assignment_route.route("/save_assignment_details", methods=["POST"])
+def save_assignment_details():
+    data = request.get_json()
+    try:
+        service = get_assignment_detail_service()
 
-    class Meta:
-        unknown = EXCLUDE
+        request_schema = SaveAssignmentDetailsRequestSchema()
+        validated_request = request_schema.load(data)
+
+        assignment_payload = validated_request["assignment_payload"]
+        trademark_prop_payload = validated_request["trademark_property_payload"]
+        receiving_payloads = validated_request.get("receiving_payloads", [])
+        conveying_payloads = validated_request.get("conveying_payloads", [])
+
+        service.save_assignment_details(
+            assignment_payload,
+            receiving_payloads,
+            conveying_payloads,
+            trademark_prop_payload
+        )
+
+        return create_success_response(
+            success_input_object=None,
+            status_code=HTTPStatus.OK.value,
+            message="Successfully saved assignment details."
+        )
+
+    except Exception as e:
+        logger.exception(f"Error saving assignment details: {e}")
+        return create_error_response(str(e), HTTPStatus.INTERNAL_SERVER_ERROR.value)
