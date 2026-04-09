@@ -1,78 +1,8 @@
-class CorrespondencePayloadMapper:
-    @staticmethod
-    def _derive_name(receiving_payload: dict):
-        individual = receiving_payload.get("individual") or {}
-        address = receiving_payload.get("addressInfo") or {}
+class SaveAssignmentDetailsRequestSchema(Schema):
+    assignment_payload = Nested(AssignmentRequestSchema, required=True)
+    trademark_property_payload = Nested(SaveRequestSchemaNoAssignmentId, required=True)
+    receiving_payloads = List(Nested(ReceivingTrademarkRequestSchema), required=False, allow_none=True)
+    conveying_payloads = List(Nested(ConveyingTrademarkRequestSchema), required=False, allow_none=True)
 
-        first_name = individual.get("firstName")
-        last_name = individual.get("lastName")
-        middle_name = individual.get("middleName")
-        prefix = individual.get("prefix")
-        suffix = individual.get("suffix")
-
-        if not first_name or not last_name:
-            attention = address.get("attention")
-            if attention:
-                text = str(attention).strip()
-                if "," in text:
-                    parts = [p.strip() for p in text.split(",", 1)]
-                    last_name = last_name or (parts[0] if len(parts) > 0 else "")
-                    first_name = first_name or (parts[1] if len(parts) > 1 else "")
-                else:
-                    parts = text.split()
-                    if len(parts) >= 2:
-                        first_name = first_name or parts[0]
-                        last_name = last_name or parts[-1]
-                    elif len(parts) == 1:
-                        first_name = first_name or parts[0]
-                        last_name = last_name or parts[0]
-
-        return {
-            "prefix": prefix,
-            "firstName": first_name or "",
-            "middleName": middle_name,
-            "lastName": last_name or "",
-            "suffix": suffix,
-        }
-
-    @staticmethod
-    def from_receiving_payload(receiving_payload: dict, assignment_id: int):
-        address = receiving_payload.get("addressInfo") or {}
-        name_block = CorrespondencePayloadMapper._derive_name(receiving_payload)
-
-        zip_code = address.get("zipCode")
-        zip_code = str(zip_code) if zip_code not in (None, "") else ""
-
-        emails = receiving_payload.get("emails") or []
-        if not emails:
-            emails = [{"email": None, "isPrimaryEmail": True}]
-
-        phones = receiving_payload.get("phones") or []
-
-        return {
-            "assignmentId": assignment_id,
-            "correspondentInfo": {
-                "correspondentId": 0,
-                "docketNumber": None,
-                "name": {
-                    "prefix": name_block.get("prefix"),
-                    "firstName": name_block["firstName"],
-                    "middleName": name_block.get("middleName"),
-                    "lastName": name_block["lastName"],
-                    "suffix": name_block.get("suffix"),
-                },
-                "addressInfo": {
-                    "addressLineOne": address.get("addressLineOne"),
-                    "addressLineTwo": address.get("addressLineTwo"),
-                    "city": address.get("city"),
-                    "state": address.get("state"),
-                    "stateId": address.get("stateId") if address.get("stateId") is not None else 1,
-                    "country": address.get("country"),
-                    "countryId": address.get("countryId"),
-                    "attention": address.get("attention"),
-                    "zipCode": zip_code,
-                },
-                "phones": phones,
-                "emails": emails,
-            }
-        }
+    class Meta:
+        unknown = EXCLUDE
