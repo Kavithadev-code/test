@@ -1,55 +1,36 @@
-class CorrespondencePayloadMapper:
+def derive_names(given_name, family_name, full_name):
+    # Case 1: given + family provided
+    if given_name or family_name:
+        first = given_name
+        last = family_name
+        middle = None
+        return first, middle, last
 
-    @staticmethod
-    def from_receiving_response(first_receiving_response, assignment_id):
-        """
-        Build correspondence payload from receiving party response
-        """
+    # Case 2: nothing to parse
+    if not full_name:
+        return None, None, None
 
-        # extract safely
-        address = first_receiving_response.get("address", {}) or {}
-        individual = first_receiving_response.get("individual", {}) or {}
+    # Case 3: semicolon format (e.g., "Last; First; Middle")
+    if ";" in full_name:
+        parts = [p.strip() for p in full_name.split(";") if p.strip()]
+        if len(parts) == 3:
+            return parts[1], parts[2], parts[0]   # First, Middle, Last
+        elif len(parts) == 2:
+            return parts[1], None, parts[0]       # First, None, Last
 
-        return {
-            "assignmentId": assignment_id,
-            "correspondentInfo": {
-                "correspondentId": first_receiving_response.get("receiving_party_id"),
+    # Case 4: space-separated format
+    parts = [p.strip() for p in full_name.split() if p.strip()]
 
-                "docketNumber": None,
+    if len(parts) == 1:
+        return parts[0], None, None
 
-                "name": {
-                    "firstName": individual.get("first_name"),
-                    "middleName": individual.get("middle_name"),
-                    "lastName": individual.get("last_name"),
-                    "prefix": individual.get("prefix"),
-                    "suffix": individual.get("suffix")
-                },
+    if len(parts) == 2:
+        return parts[0], None, parts[1]
 
-                "addressInfo": {
-                    "addressLineOne": address.get("address_line1"),
-                    "addressLineTwo": address.get("address_line2"),
-                    "city": address.get("city"),
-                    "state": address.get("state"),
-                    "stateId": address.get("state_id"),
-                    "country": address.get("country"),
-                    "countryId": address.get("country_id"),
-                    "zipCode": address.get("zip_code"),
-                    "attention": address.get("attention")
-                },
+    if len(parts) >= 3:
+        first = parts[0]
+        last = parts[-1]
+        middle = " ".join(parts[1:-1])  # supports multiple middle names
+        return first, middle, last
 
-                "phones": [
-                    {
-                        "type": "PRIMARY",
-                        "phoneNumber": "1234567890",
-                        "extension": None
-                    }
-                ],
-
-                "emails": [
-                    {
-                        "email": "test@example.com",
-                        "isPrimaryEmail": True
-                    }
-                ]
-            }
-        }
+    return None, None, None
