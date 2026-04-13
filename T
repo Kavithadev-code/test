@@ -1,30 +1,55 @@
-@assignment_route.route("/save_assignment_details", methods=["POST"])
-def save_assignment_details():
-    data = request.get_json()
-    try:
-        service = get_assignment_detail_service()
+class CorrespondencePayloadMapper:
 
-        request_schema = SaveAssignmentDetailsRequestSchema()
-        validated_request = request_schema.load(data)
+    @staticmethod
+    def from_receiving_response(first_receiving_response, assignment_id):
+        """
+        Build correspondence payload from receiving party response
+        """
 
-        assignment_payload = validated_request["assignment_payload"]
-        trademark_prop_payload = validated_request["trademark_property_payload"]
-        receiving_payloads = validated_request.get("receiving_payloads", [])
-        conveying_payloads = validated_request.get("conveying_payloads", [])
+        # extract safely
+        address = first_receiving_response.get("address", {}) or {}
+        individual = first_receiving_response.get("individual", {}) or {}
 
-        service.save_assignment_details(
-            assignment_payload,
-            receiving_payloads,
-            conveying_payloads,
-            trademark_prop_payload
-        )
+        return {
+            "assignmentId": assignment_id,
+            "correspondentInfo": {
+                "correspondentId": first_receiving_response.get("receiving_party_id"),
 
-        return create_success_response(
-            success_input_object=None,
-            status_code=HTTPStatus.OK.value,
-            message="Successfully saved assignment details."
-        )
+                "docketNumber": None,
 
-    except Exception as e:
-        logger.exception(f"Error saving assignment details: {e}")
-        return create_error_response(str(e), HTTPStatus.INTERNAL_SERVER_ERROR.value)
+                "name": {
+                    "firstName": individual.get("first_name"),
+                    "middleName": individual.get("middle_name"),
+                    "lastName": individual.get("last_name"),
+                    "prefix": individual.get("prefix"),
+                    "suffix": individual.get("suffix")
+                },
+
+                "addressInfo": {
+                    "addressLineOne": address.get("address_line1"),
+                    "addressLineTwo": address.get("address_line2"),
+                    "city": address.get("city"),
+                    "state": address.get("state"),
+                    "stateId": address.get("state_id"),
+                    "country": address.get("country"),
+                    "countryId": address.get("country_id"),
+                    "zipCode": address.get("zip_code"),
+                    "attention": address.get("attention")
+                },
+
+                "phones": [
+                    {
+                        "type": "PRIMARY",
+                        "phoneNumber": "1234567890",
+                        "extension": None
+                    }
+                ],
+
+                "emails": [
+                    {
+                        "email": "test@example.com",
+                        "isPrimaryEmail": True
+                    }
+                ]
+            }
+        }
