@@ -1,105 +1,246 @@
 import pytest
 from unittest.mock import MagicMock
 
-from src.service.assignment.trademark_properties_service import TrademarkPropertiesService
+from src.service.assignment.assignment_details_service import AssignmentDetailsService
 
 
 @pytest.fixture
-def mock_repo():
+def mock_session():
     return MagicMock()
 
 
 @pytest.fixture
-def mock_service(mock_repo):
-    service = TrademarkPropertiesService()
-    service.trademark_properties_repository = mock_repo
-    return service
+def mock_assignment_service():
+    return MagicMock()
 
 
-def test_save_properties_success(mock_service, mock_repo):
-    property_list = [
-        {
-            "serial_number": "74195413",
-            "registration_number": "1234567",
-            "owner": "TATA",
-            "search_by": "owner",
-            "mark_literal": "TATA",
-        }
-    ]
-    assignment_id = 14592
+@pytest.fixture
+def mock_trademark_service():
+    return MagicMock()
 
-    saved_obj = MagicMock()
-    saved_obj.serial_number = "74195413"
-    saved_obj.registration_number = "1234567"
-    saved_obj.fk_assignment_id = 14592
-    saved_obj.trademark_properties_id = 501
-    saved_obj.searched_by = "owner"
-    saved_obj.word_mark = "TATA"
-    saved_obj.owner = "TATA"
 
-    mock_repo.save_properties.return_value = [saved_obj]
+@pytest.fixture
+def mock_receiving_party_service():
+    return MagicMock()
 
-    result = mock_service.save_properties(
-        property_list=property_list,
-        assignment_id=assignment_id,
-        commit_flag=True
+
+@pytest.fixture
+def mock_conveying_party_service():
+    return MagicMock()
+
+
+@pytest.fixture
+def mock_correspondence_service():
+    return MagicMock()
+
+
+@pytest.fixture
+def service(
+    mock_session,
+    mock_assignment_service,
+    mock_trademark_service,
+    mock_receiving_party_service,
+    mock_conveying_party_service,
+    mock_correspondence_service,
+):
+    return AssignmentDetailsService(
+        session=mock_session,
+        assignment_service=mock_assignment_service,
+        trademark_service=mock_trademark_service,
+        receiving_party_service=mock_receiving_party_service,
+        conveying_party_service=mock_conveying_party_service,
+        correspondence_service=mock_correspondence_service,
     )
 
-    mock_repo.save_properties.assert_called_once_with(
-        property_list, assignment_id, commit_flag=True
+
+@pytest.fixture
+def validated_request():
+    return {
+        "assignment_payload": {
+            "name": "Test Assignment",
+            "formType": "PATENT",
+        },
+        "receiving_payloads": [
+            {"name": "Receiving 1"}
+        ],
+        "conveying_payloads": [
+            {"name": "Conveying 1"}
+        ],
+        "trademark_property_payload": {
+            "property_list": [
+                {
+                    "serial_number": "74195413",
+                    "registration_number": "1234567",
+                    "owner": "TATA",
+                    "search_by": "owner",
+                    "mark_literal": "TATA",
+                }
+            ]
+        },
+        "correspondence_payload": {
+            "name": "Correspondence 1"
+        },
+    }
+
+
+def test_save_assignment_details_success(
+    service,
+    mock_session,
+    mock_assignment_service,
+    mock_trademark_service,
+    mock_receiving_party_service,
+    mock_conveying_party_service,
+    mock_correspondence_service,
+    validated_request,
+):
+    mock_assignment_service.create_new_assignment.return_value = {"assignmentId": 101}
+    mock_trademark_service.save_properties.return_value = [{"trademark_property_id": 1}]
+    mock_receiving_party_service.save_receiving_parties.return_value = {"receiving_party_id": 11}
+    mock_correspondence_service.save_assignment_correspondence_info.return_value = {"correspondent_id": 21}
+    mock_conveying_party_service.save_conveying_parties.return_value = {"conveying_party_id": 31}
+
+    service.save_assignment_details(validated_request)
+
+    mock_assignment_service.create_new_assignment.assert_called_once_with(
+        validated_request["assignment_payload"], False
     )
-    assert result == [
-        {
-            "serial_number": "74195413",
-            "registration_number": "1234567",
-            "assignment_id": 14592,
-            "trademark_property_id": 501,
-            "search_by": "owner",
-            "word_mark": "TATA",
-            "owner": "TATA",
-        }
-    ]
 
-
-def test_save_properties_empty_result(mock_service, mock_repo):
-    property_list = []
-    assignment_id = 14592
-
-    mock_repo.save_properties.return_value = []
-
-    result = mock_service.save_properties(
-        property_list=property_list,
-        assignment_id=assignment_id,
-        commit_flag=True
+    mock_trademark_service.save_properties.assert_called_once_with(
+        validated_request["trademark_property_payload"]["property_list"],
+        101,
+        False,
     )
 
-    mock_repo.save_properties.assert_called_once_with(
-        property_list, assignment_id, commit_flag=True
-    )
-    assert result == []
-
-
-def test_save_properties_exception(mock_service, mock_repo):
-    property_list = [
-        {
-            "serial_number": "74195413",
-            "registration_number": "1234567",
-            "owner": "TATA",
-            "search_by": "owner",
-            "mark_literal": "TATA",
-        }
-    ]
-    assignment_id = 14592
-
-    mock_repo.save_properties.side_effect = Exception("Database Exception")
-
-    result = mock_service.save_properties(
-        property_list=property_list,
-        assignment_id=assignment_id,
-        commit_flag=True
+    receiving_call_payload = validated_request["receiving_payloads"][0]
+    assert receiving_call_payload["assignment_id"] == 101
+    mock_receiving_party_service.save_receiving_parties.assert_called_once_with(
+        receiving_call_payload, False
     )
 
-    mock_repo.save_properties.assert_called_once_with(
-        property_list, assignment_id, commit_flag=True
+    correspondence_payload = validated_request["correspondence_payload"]
+    assert correspondence_payload["assignmentId"] == 101
+    mock_correspondence_service.save_assignment_correspondence_info.assert_called_once_with(
+        correspondence_payload, False
     )
-    assert result is None
+
+    conveying_call_payload = validated_request["conveying_payloads"][0]
+    assert conveying_call_payload["assignment_id"] == 101
+    mock_conveying_party_service.save_conveying_parties.assert_called_once_with(
+        conveying_call_payload, False
+    )
+
+    mock_session.commit.assert_called_once()
+    mock_session.rollback.assert_not_called()
+
+
+def test_save_assignment_details_raises_when_assignment_not_created(
+    service,
+    mock_session,
+    mock_assignment_service,
+    validated_request,
+):
+    mock_assignment_service.create_new_assignment.return_value = {}
+
+    with pytest.raises(Exception, match="Error saving the assignment details"):
+        service.save_assignment_details(validated_request)
+
+    mock_session.rollback.assert_called_once()
+    mock_session.commit.assert_not_called()
+
+
+def test_save_assignment_details_raises_when_trademark_save_fails(
+    service,
+    mock_session,
+    mock_assignment_service,
+    mock_trademark_service,
+    validated_request,
+):
+    mock_assignment_service.create_new_assignment.return_value = {"assignmentId": 101}
+    mock_trademark_service.save_properties.return_value = None
+
+    with pytest.raises(Exception, match="Error saving the trademark properties"):
+        service.save_assignment_details(validated_request)
+
+    mock_session.rollback.assert_called_once()
+    mock_session.commit.assert_not_called()
+
+
+def test_save_assignment_details_raises_when_receiving_party_save_fails(
+    service,
+    mock_session,
+    mock_assignment_service,
+    mock_trademark_service,
+    mock_receiving_party_service,
+    validated_request,
+):
+    mock_assignment_service.create_new_assignment.return_value = {"assignmentId": 101}
+    mock_trademark_service.save_properties.return_value = [{"trademark_property_id": 1}]
+    mock_receiving_party_service.save_receiving_parties.return_value = None
+
+    with pytest.raises(Exception, match="Error saving the receiving party details"):
+        service.save_assignment_details(validated_request)
+
+    mock_receiving_party_service.save_receiving_parties.assert_called_once()
+    mock_session.rollback.assert_called_once()
+    mock_session.commit.assert_not_called()
+
+
+def test_save_assignment_details_raises_when_correspondence_save_fails(
+    service,
+    mock_session,
+    mock_assignment_service,
+    mock_trademark_service,
+    mock_receiving_party_service,
+    mock_correspondence_service,
+    validated_request,
+):
+    mock_assignment_service.create_new_assignment.return_value = {"assignmentId": 101}
+    mock_trademark_service.save_properties.return_value = [{"trademark_property_id": 1}]
+    mock_receiving_party_service.save_receiving_parties.return_value = {"receiving_party_id": 11}
+    mock_correspondence_service.save_assignment_correspondence_info.return_value = None
+
+    with pytest.raises(Exception, match="Error saving the correspondent details"):
+        service.save_assignment_details(validated_request)
+
+    mock_correspondence_service.save_assignment_correspondence_info.assert_called_once()
+    mock_session.rollback.assert_called_once()
+    mock_session.commit.assert_not_called()
+
+
+def test_save_assignment_details_raises_when_conveying_party_save_fails(
+    service,
+    mock_session,
+    mock_assignment_service,
+    mock_trademark_service,
+    mock_receiving_party_service,
+    mock_correspondence_service,
+    mock_conveying_party_service,
+    validated_request,
+):
+    mock_assignment_service.create_new_assignment.return_value = {"assignmentId": 101}
+    mock_trademark_service.save_properties.return_value = [{"trademark_property_id": 1}]
+    mock_receiving_party_service.save_receiving_parties.return_value = {"receiving_party_id": 11}
+    mock_correspondence_service.save_assignment_correspondence_info.return_value = {"correspondent_id": 21}
+    mock_conveying_party_service.save_conveying_parties.return_value = None
+
+    with pytest.raises(Exception, match="Error saving the conveying party details"):
+        service.save_assignment_details(validated_request)
+
+    mock_conveying_party_service.save_conveying_parties.assert_called_once()
+    mock_session.rollback.assert_called_once()
+    mock_session.commit.assert_not_called()
+
+
+def test_save_assignment_details_rolls_back_on_service_exception(
+    service,
+    mock_session,
+    mock_assignment_service,
+    validated_request,
+):
+    mock_assignment_service.create_new_assignment.side_effect = Exception("db failure")
+
+    with pytest.raises(Exception, match="db failure"):
+        service.save_assignment_details(validated_request)
+
+    mock_session.rollback.assert_called_once()
+    mock_session.commit.assert_not_called()
