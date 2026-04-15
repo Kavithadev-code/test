@@ -1,26 +1,105 @@
+import pytest
+from unittest.mock import MagicMock
+
+from src.service.assignment.trademark_properties_service import TrademarkPropertiesService
+
+
 @pytest.fixture
-def mock_service(
-    mock_conveying_repo,
-    mock_individual_repo,
-    mock_entity_repo,
-    mock_email_repo,
-    mock_phone_repo,
-):
-    service = ConveyingPartyService()
+def mock_repo():
+    return MagicMock()
 
-    service.conveying_party_repo = mock_conveying_repo
-    service.conveying_party_repository = mock_conveying_repo
 
-    service.individual_repo = mock_individual_repo
-    service.individual_repository = mock_individual_repo
-
-    service.entity_repo = mock_entity_repo
-    service.entity_repository = mock_entity_repo
-
-    service.individual_email_info_repo = mock_email_repo
-    service.individual_email_info_repository = mock_email_repo
-
-    service.individual_phone_info_repo = mock_phone_repo
-    service.individual_phone_info_repository = mock_phone_repo
-
+@pytest.fixture
+def mock_service(mock_repo):
+    service = TrademarkPropertiesService()
+    service.trademark_properties_repository = mock_repo
     return service
+
+
+def test_save_properties_success(mock_service, mock_repo):
+    property_list = [
+        {
+            "serial_number": "74195413",
+            "registration_number": "1234567",
+            "owner": "TATA",
+            "search_by": "owner",
+            "mark_literal": "TATA",
+        }
+    ]
+    assignment_id = 14592
+
+    saved_obj = MagicMock()
+    saved_obj.serial_number = "74195413"
+    saved_obj.registration_number = "1234567"
+    saved_obj.fk_assignment_id = 14592
+    saved_obj.trademark_properties_id = 501
+    saved_obj.searched_by = "owner"
+    saved_obj.word_mark = "TATA"
+    saved_obj.owner = "TATA"
+
+    mock_repo.save_properties.return_value = [saved_obj]
+
+    result = mock_service.save_properties(
+        property_list=property_list,
+        assignment_id=assignment_id,
+        commit_flag=True
+    )
+
+    mock_repo.save_properties.assert_called_once_with(
+        property_list, assignment_id, commit_flag=True
+    )
+    assert result == [
+        {
+            "serial_number": "74195413",
+            "registration_number": "1234567",
+            "assignment_id": 14592,
+            "trademark_property_id": 501,
+            "search_by": "owner",
+            "word_mark": "TATA",
+            "owner": "TATA",
+        }
+    ]
+
+
+def test_save_properties_empty_result(mock_service, mock_repo):
+    property_list = []
+    assignment_id = 14592
+
+    mock_repo.save_properties.return_value = []
+
+    result = mock_service.save_properties(
+        property_list=property_list,
+        assignment_id=assignment_id,
+        commit_flag=True
+    )
+
+    mock_repo.save_properties.assert_called_once_with(
+        property_list, assignment_id, commit_flag=True
+    )
+    assert result == []
+
+
+def test_save_properties_exception(mock_service, mock_repo):
+    property_list = [
+        {
+            "serial_number": "74195413",
+            "registration_number": "1234567",
+            "owner": "TATA",
+            "search_by": "owner",
+            "mark_literal": "TATA",
+        }
+    ]
+    assignment_id = 14592
+
+    mock_repo.save_properties.side_effect = Exception("Database Exception")
+
+    result = mock_service.save_properties(
+        property_list=property_list,
+        assignment_id=assignment_id,
+        commit_flag=True
+    )
+
+    mock_repo.save_properties.assert_called_once_with(
+        property_list, assignment_id, commit_flag=True
+    )
+    assert result is None
