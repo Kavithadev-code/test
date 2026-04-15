@@ -1,36 +1,158 @@
-def derive_names(given_name, family_name, full_name):
-    # Case 1: given + family provided
-    if given_name or family_name:
-        first = given_name
-        last = family_name
-        middle = None
-        return first, middle, last
+import pytest
+from types import SimpleNamespace
+from your_module.correspondent import Correspondent
 
-    # Case 2: nothing to parse
-    if not full_name:
-        return None, None, None
 
-    # Case 3: semicolon format (e.g., "Last; First; Middle")
-    if ";" in full_name:
-        parts = [p.strip() for p in full_name.split(";") if p.strip()]
-        if len(parts) == 3:
-            return parts[1], parts[2], parts[0]   # First, Middle, Last
-        elif len(parts) == 2:
-            return parts[1], None, parts[0]       # First, None, Last
+@pytest.fixture
+def correspondent():
+    return Correspondent()
 
-    # Case 4: space-separated format
-    parts = [p.strip() for p in full_name.split() if p.strip()]
 
-    if len(parts) == 1:
-        return parts[0], None, None
+# -------------------------------
+# ADDRESS TESTS
+# -------------------------------
 
-    if len(parts) == 2:
-        return parts[0], None, parts[1]
+def test_get_address_info_dto_none(correspondent):
+    correspondent.address = None
+    assert correspondent.get_address_info_dto() is None
 
-    if len(parts) >= 3:
-        first = parts[0]
-        last = parts[-1]
-        middle = " ".join(parts[1:-1])  # supports multiple middle names
-        return first, middle, last
 
-    return None, None, None
+def test_get_address_info_dto_success(correspondent):
+    correspondent.address = SimpleNamespace(
+        country="US",
+        address_line1="Line1",
+        address_line2="Line2",
+        city="NY",
+        state="NY",
+        zipCode="10001",
+        attention="Test",
+        state_id=1,
+        country_id=91
+    )
+
+    result = correspondent.get_address_info_dto()
+
+    assert result["country"] == "US"
+    assert result["addressLineOne"] == "Line1"
+    assert result["city"] == "NY"
+    assert result["zipCode"] == "10001"
+
+
+# -------------------------------
+# INDIVIDUAL TESTS
+# -------------------------------
+
+def test_get_individual_info_none(correspondent):
+    correspondent.individual = None
+    assert correspondent.get_individual_info_dto() is None
+
+
+def test_get_individual_info_success(correspondent):
+    correspondent.individual = SimpleNamespace(
+        prefix="Mr",
+        first_name="John",
+        middle_name="A",
+        last_name="Doe",
+        suffix="Jr"
+    )
+
+    result = correspondent.get_individual_info_dto()
+
+    assert result["firstName"] == "John"
+    assert result["middleName"] == "A"
+    assert result["lastName"] == "Doe"
+
+
+# -------------------------------
+# EMAIL TESTS
+# -------------------------------
+
+def test_get_email_none(correspondent):
+    correspondent.individual = SimpleNamespace(
+        individual_email_info=None
+    )
+    assert correspondent.get_email() is None
+
+
+def test_get_email_success(correspondent):
+    correspondent.individual = SimpleNamespace(
+        individual_email_info=[
+            SimpleNamespace(email="test@mail.com", is_primary_email=True),
+            SimpleNamespace(email="test2@mail.com", is_primary_email=False)
+        ]
+    )
+
+    result = correspondent.get_email()
+
+    assert len(result) == 2
+    assert result[0]["email"] == "test@mail.com"
+    assert result[0]["isPrimaryEmail"] is True
+
+
+# -------------------------------
+# PHONE TESTS
+# -------------------------------
+
+def test_get_phones_none(correspondent):
+    correspondent.individual = SimpleNamespace(
+        individual_phone_info=None
+    )
+    assert correspondent.get_phones() is None
+
+
+def test_get_phones_success(correspondent):
+    correspondent.individual = SimpleNamespace(
+        individual_phone_info=[
+            SimpleNamespace(phone_type="mobile", phone="123", phone_extension="001"),
+            SimpleNamespace(phone_type="home", phone="456", phone_extension=None)
+        ]
+    )
+
+    result = correspondent.get_phones()
+
+    assert len(result) == 2
+    assert result[0]["type"] == "mobile"
+    assert result[0]["phoneNumber"] == "123"
+
+
+# -------------------------------
+# FINAL AGGREGATION TEST
+# -------------------------------
+
+def test_get_assignment_correspondent_info(correspondent):
+    correspondent.correspondent_id = 10
+    correspondent.docket_number = "DKT123"
+
+    correspondent.address = SimpleNamespace(
+        country="US",
+        address_line1="Line1",
+        address_line2=None,
+        city="NY",
+        state="NY",
+        zipCode="10001",
+        attention=None,
+        state_id=1,
+        country_id=91
+    )
+
+    correspondent.individual = SimpleNamespace(
+        prefix="Mr",
+        first_name="John",
+        middle_name=None,
+        last_name="Doe",
+        suffix=None,
+        individual_email_info=[
+            SimpleNamespace(email="test@mail.com", is_primary_email=True)
+        ],
+        individual_phone_info=[
+            SimpleNamespace(phone_type="mobile", phone="123", phone_extension="001")
+        ]
+    )
+
+    result = correspondent.get_assignment_correspondent_info()
+
+    assert result["correspondentId"] == 10
+    assert result["docketNumber"] == "DKT123"
+    assert result["name"]["firstName"] == "John"
+    assert result["emails"][0]["email"] == "test@mail.com"
+    assert result["phones"][0]["phoneNumber"] == "123"
