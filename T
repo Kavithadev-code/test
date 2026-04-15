@@ -1,207 +1,104 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+from sqlalchemy.orm import Session
 
-from src.repositories.assignment.receiving_party_repository import ReceivingPartyRepository
+from src.repositories.assignment.trademark_properties_repository import TrademarkPropertiesRepository
 
 
-SAVE_INPUT_DATA = {
-    "receiving_party_id": 10,
-    "name": "ABC Corp"
-}
+PROPERTY_INPUT_DATA = [
+    {
+        "serial_number": "74195413",
+        "registration_number": "1234567",
+        "owner": "TATA",
+        "search_by": "owner",
+        "mark_literal": "TATA"
+    },
+    {
+        "serial_number": "74195414",
+        "registration_number": "7654321",
+        "owner": "TCS",
+        "search_by": "owner",
+        "mark_literal": "TCS"
+    }
+]
 
 
 @pytest.fixture
 def mock_db_session():
-    return MagicMock()
+    return MagicMock(spec=Session)
 
 
 @pytest.fixture
 def mock_repo(mock_db_session):
-    return ReceivingPartyRepository(mock_db_session)
+    return TrademarkPropertiesRepository(mock_db_session)
 
 
-@pytest.fixture
-def mock_receiving_party():
-    obj = MagicMock()
-    obj.to_dict.return_value = {
-        "receiving_party_id": 10,
-        "name": "ABC Corp"
-    }
-    return obj
+def test_save_properties_commit_true(mock_repo, mock_db_session):
+    assignment_id = 14592
 
-
-def test_save_receiving_parties_existing_commit_true(
-    mock_repo, mock_db_session, mock_receiving_party
-):
-    input_data = SAVE_INPUT_DATA.copy()
-    input_data["receiving_party_id"] = 10
-
-    mock_filter = MagicMock()
-    mock_filter.first.return_value = mock_receiving_party
-    mock_db_session.query.return_value.filter.return_value = mock_filter
-
-    result = mock_repo.save_receiving_parties(
-        input_data,
-        type_id=1,
-        address_id=100,
-        domestic_individual_id=200,
-        domestic_address_info_id=300,
-        commit_flag=True,
+    result = mock_repo.save_properties(
+        PROPERTY_INPUT_DATA,
+        assignment_id,
+        commit_flag=True
     )
 
-    mock_db_session.query.assert_called_once()
-    mock_db_session.query.return_value.filter.assert_called_once()
-    mock_filter.first.assert_called_once()
-    mock_receiving_party.set_receiving_party.assert_called_once_with(
-        input_data, 1, 100, 200, 300
+    assert mock_db_session.add.call_count == 2
+    mock_db_session.commit.assert_called_once()
+    mock_db_session.flush.assert_not_called()
+    mock_db_session.refresh.assert_not_called()
+    assert len(result) == 2
+    assert result[0].fk_assignment_id == assignment_id
+    assert result[0].serial_number == "74195413"
+    assert result[0].registration_number == "1234567"
+    assert result[0].owner == "TATA"
+    assert result[0].search_by == "owner"
+    assert result[0].mark_literal == "TATA"
+    assert result[0].lock_control_number == 0
+
+
+def test_save_properties_commit_false(mock_repo, mock_db_session):
+    assignment_id = 14592
+
+    result = mock_repo.save_properties(
+        PROPERTY_INPUT_DATA,
+        assignment_id,
+        commit_flag=False
     )
+
+    assert mock_db_session.add.call_count == 2
+    mock_db_session.commit.assert_not_called()
+    mock_db_session.flush.assert_called_once()
+    assert mock_db_session.refresh.call_count == 2
+    assert len(result) == 2
+    mock_db_session.refresh.assert_any_call(result[0])
+    mock_db_session.refresh.assert_any_call(result[1])
+
+
+def test_save_properties_empty_list(mock_repo, mock_db_session):
+    assignment_id = 14592
+
+    result = mock_repo.save_properties(
+        [],
+        assignment_id,
+        commit_flag=True
+    )
+
     mock_db_session.add.assert_not_called()
     mock_db_session.commit.assert_called_once()
     mock_db_session.flush.assert_not_called()
     mock_db_session.refresh.assert_not_called()
-    assert result == mock_receiving_party.to_dict.return_value
+    assert result == []
 
 
-def test_save_receiving_parties_existing_commit_false(
-    mock_repo, mock_db_session, mock_receiving_party
-):
-    input_data = SAVE_INPUT_DATA.copy()
-    input_data["receiving_party_id"] = 10
-
-    mock_filter = MagicMock()
-    mock_filter.first.return_value = mock_receiving_party
-    mock_db_session.query.return_value.filter.return_value = mock_filter
-
-    result = mock_repo.save_receiving_parties(
-        input_data,
-        type_id=1,
-        address_id=100,
-        domestic_individual_id=200,
-        domestic_address_info_id=300,
-        commit_flag=False,
-    )
-
-    mock_db_session.query.assert_called_once()
-    mock_db_session.query.return_value.filter.assert_called_once()
-    mock_filter.first.assert_called_once()
-    mock_receiving_party.set_receiving_party.assert_called_once_with(
-        input_data, 1, 100, 200, 300
-    )
-    mock_db_session.add.assert_not_called()
-    mock_db_session.commit.assert_not_called()
-    mock_db_session.flush.assert_called_once()
-    mock_db_session.refresh.assert_called_once_with(mock_receiving_party)
-    assert result == mock_receiving_party.to_dict.return_value
-
-
-@patch("src.repositories.assignment.receiving_party_repository.ReceivingParty")
-def test_save_receiving_parties_new_commit_true(
-    mock_receiving_party_class, mock_repo, mock_db_session
-):
-    input_data = SAVE_INPUT_DATA.copy()
-    input_data["receiving_party_id"] = 0
-
-    new_entity = MagicMock()
-    new_entity.to_dict.return_value = {
-        "receiving_party_id": 11,
-        "name": "ABC Corp"
-    }
-    mock_receiving_party_class.from_dict.return_value = new_entity
-
-    result = mock_repo.save_receiving_parties(
-        input_data,
-        type_id=1,
-        address_id=100,
-        domestic_individual_id=200,
-        domestic_address_info_id=300,
-        commit_flag=True,
-    )
-
-    mock_receiving_party_class.from_dict.assert_called_once_with(
-        input_data, 1, 100, 200, 300
-    )
-    mock_db_session.add.assert_called_once_with(new_entity)
-    mock_db_session.commit.assert_called_once()
-    mock_db_session.flush.assert_not_called()
-    mock_db_session.refresh.assert_not_called()
-    assert result == new_entity.to_dict.return_value
-
-
-@patch("src.repositories.assignment.receiving_party_repository.ReceivingParty")
-def test_save_receiving_parties_new_commit_false(
-    mock_receiving_party_class, mock_repo, mock_db_session
-):
-    input_data = SAVE_INPUT_DATA.copy()
-    input_data["receiving_party_id"] = 0
-
-    new_entity = MagicMock()
-    new_entity.to_dict.return_value = {
-        "receiving_party_id": 11,
-        "name": "ABC Corp"
-    }
-    mock_receiving_party_class.from_dict.return_value = new_entity
-
-    result = mock_repo.save_receiving_parties(
-        input_data,
-        type_id=1,
-        address_id=100,
-        domestic_individual_id=200,
-        domestic_address_info_id=300,
-        commit_flag=False,
-    )
-
-    mock_receiving_party_class.from_dict.assert_called_once_with(
-        input_data, 1, 100, 200, 300
-    )
-    mock_db_session.add.assert_called_once_with(new_entity)
-    mock_db_session.commit.assert_not_called()
-    mock_db_session.flush.assert_called_once()
-    mock_db_session.refresh.assert_called_once_with(new_entity)
-    assert result == new_entity.to_dict.return_value
-
-
-@patch("src.repositories.assignment.receiving_party_repository.ReceivingParty")
-def test_save_receiving_parties_returns_none_when_saved_entity_none(
-    mock_receiving_party_class, mock_repo, mock_db_session
-):
-    input_data = SAVE_INPUT_DATA.copy()
-    input_data["receiving_party_id"] = 0
-
-    mock_receiving_party_class.from_dict.return_value = None
-
-    result = mock_repo.save_receiving_parties(
-        input_data,
-        type_id=1,
-        address_id=100,
-        domestic_individual_id=200,
-        domestic_address_info_id=300,
-        commit_flag=True,
-    )
-
-    mock_receiving_party_class.from_dict.assert_called_once_with(
-        input_data, 1, 100, 200, 300
-    )
-    mock_db_session.add.assert_called_once_with(None)
-    mock_db_session.commit.assert_called_once()
-    assert result is None
-
-
-def test_save_receiving_parties_exception_rolls_back(
-    mock_repo, mock_db_session
-):
-    input_data = SAVE_INPUT_DATA.copy()
-    input_data["receiving_party_id"] = 10
-
-    mock_db_session.query.side_effect = Exception("Database Exception")
+def test_save_properties_db_error(mock_repo, mock_db_session):
+    assignment_id = 14592
+    mock_db_session.add.side_effect = Exception("Database Exception")
 
     with pytest.raises(Exception, match="Database Exception"):
-        mock_repo.save_receiving_parties(
-            input_data,
-            type_id=1,
-            address_id=100,
-            domestic_individual_id=200,
-            domestic_address_info_id=300,
-            commit_flag=True,
+        mock_repo.save_properties(
+            PROPERTY_INPUT_DATA,
+            assignment_id,
+            commit_flag=True
         )
 
     mock_db_session.rollback.assert_called_once()
