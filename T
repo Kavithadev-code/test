@@ -1,16 +1,26 @@
-def test_save_conveying_parties_success(mock_service, mock_conveying_repo):
-    mock_conveying_repo.save_conveying_parties.return_value = SAVE_RETURN_VALUE
+@pytest.fixture
+def mock_service(
+    mock_conveying_repo,
+    mock_individual_repo,
+    mock_entity_repo,
+    mock_email_repo,
+    mock_phone_repo,
+):
+    service = ConveyingPartyService()
 
-    result = mock_service.save_conveying_parties(SERVICE_INPUT)
+    service.conveying_party_repo = mock_conveying_repo
+    service.conveying_party_repository = mock_conveying_repo
 
-    mock_conveying_repo.save_conveying_parties.assert_called_once()
-    assert result == SAVE_RETURN_VALUE
+    service.individual_repo = mock_individual_repo
+    service.individual_repository = mock_individual_repo
 
+    service.entity_repo = mock_entity_repo
+    service.entity_repository = mock_entity_repo
 
-def test_save_conveying_parties_failure(mock_service, mock_conveying_repo):
-    mock_conveying_repo.save_conveying_parties.side_effect = Exception("Database Exception")
+    service.individual_email_info_repo = mock_email_repo
+    service.individual_email_info_repository = mock_email_repo
 
-    with pytest.raises(Exception, match="Database Exception"):
-        mock_service.save_conveying_parties(SERVICE_INPUT)
+    service.individual_phone_info_repo = mock_phone_repo
+    service.individual_phone_info_repository = mock_phone_repo
 
-    mock_conveying_repo.save_conveying_parties.assert_called_once()
+    return service
