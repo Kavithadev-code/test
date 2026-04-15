@@ -1,8 +1,8 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.repositories.assignment.address_repository import AddressRepository
+from src.repositories.assignment.assignment_repository import AssignmentRepository
 from src.exceptions.database_exception import DatabaseException
 
 
@@ -13,171 +13,67 @@ def mock_session():
 
 @pytest.fixture
 def repository(mock_session):
-    return AddressRepository(mock_session)
+    return AssignmentRepository(mock_session)
 
 
-def test_save_address_info_new_address(repository, mock_session):
-    address = MagicMock()
-    address.address_id = None
+def test_save_assignment_new_with_commit_true(repository, mock_session):
+    assignment = MagicMock()
+    assignment.assignment_id = None
 
-    result = repository.save_address_info(address)
+    result = repository.save_assignment(assignment, commit_flag=True)
 
-    mock_session.add.assert_called_once_with(address)
-    mock_session.commit.assert_called_once()
-    assert result == address
-
-
-def test_save_address_info_existing_address(repository, mock_session):
-    address = MagicMock()
-    address.address_id = 101
-
-    result = repository.save_address_info(address)
-
-    mock_session.add.assert_not_called()
-    mock_session.commit.assert_called_once()
-    assert result == address
-
-
-def test_save_address_info_sqlalchemy_error(repository, mock_session):
-    address = MagicMock()
-    address.address_id = None
-    mock_session.add.side_effect = SQLAlchemyError("db error")
-
-    with pytest.raises(DatabaseException) as exc_info:
-        repository.save_address_info(address)
-
-    mock_session.rollback.assert_called_once()
-    assert "Error saving Address details" in str(exc_info.value)
-
-
-def test_get_address_info_by_address_id_found(repository, mock_session):
-    address_id = 123
-    mock_address = MagicMock()
-
-    mock_query = MagicMock()
-    mock_query.get.return_value = mock_address
-    mock_session.query.return_value = mock_query
-
-    result = repository.get_address_info_by_address_id(address_id)
-
-    mock_session.query.assert_called_once()
-    mock_query.get.assert_called_once_with(address_id)
-    assert result == mock_address
-
-
-def test_get_address_info_by_address_id_not_found(repository, mock_session):
-    address_id = 123
-
-    mock_query = MagicMock()
-    mock_query.get.return_value = None
-    mock_session.query.return_value = mock_query
-
-    result = repository.get_address_info_by_address_id(address_id)
-
-    mock_query.get.assert_called_once_with(address_id)
-    assert result is None
-
-
-def test_get_address_info_by_address_id_exception(repository, mock_session):
-    mock_session.query.side_effect = Exception("unexpected error")
-
-    with pytest.raises(DatabaseException) as exc_info:
-        repository.get_address_info_by_address_id(123)
-
-    assert "Unable to get Address Info" in str(exc_info.value)
-
-
-def test_upsert_address_update_with_commit_true(repository, mock_session):
-    address_info = {
-        "address_id": 10,
-        "city": "Dallas",
-        "state": "TX"
-    }
-
-    mock_address = MagicMock()
-
-    mock_query = MagicMock()
-    mock_query.get.return_value = mock_address
-    mock_session.query.return_value = mock_query
-
-    result = repository.upsert_address(address_info, commit_flag=True)
-
-    mock_session.query.assert_called_once()
-    mock_query.get.assert_called_once_with(10)
-    mock_address.set_address.assert_called_once_with(address_info)
+    mock_session.add.assert_called_once_with(assignment)
     mock_session.commit.assert_called_once()
     mock_session.flush.assert_not_called()
     mock_session.refresh.assert_not_called()
-    assert result == mock_address
+    assert result == assignment
 
 
-def test_upsert_address_update_with_commit_false(repository, mock_session):
-    address_info = {
-        "address_id": 10,
-        "city": "Dallas",
-        "state": "TX"
-    }
+def test_save_assignment_new_with_commit_false(repository, mock_session):
+    assignment = MagicMock()
+    assignment.assignment_id = None
 
-    mock_address = MagicMock()
+    result = repository.save_assignment(assignment, commit_flag=False)
 
-    mock_query = MagicMock()
-    mock_query.get.return_value = mock_address
-    mock_session.query.return_value = mock_query
-
-    result = repository.upsert_address(address_info, commit_flag=False)
-
-    mock_address.set_address.assert_called_once_with(address_info)
+    mock_session.add.assert_called_once_with(assignment)
     mock_session.commit.assert_not_called()
     mock_session.flush.assert_called_once()
-    mock_session.refresh.assert_called_once_with(mock_address)
-    assert result == mock_address
+    mock_session.refresh.assert_called_once_with(assignment)
+    assert result == assignment
 
 
-@patch("src.repositories.assignment.address_repository.Address")
-def test_upsert_address_create_new_address(mock_address_class, repository):
-    address_info = {
-        "city": "Dallas",
-        "state": "TX"
-    }
+def test_save_assignment_existing_assignment(repository, mock_session):
+    assignment = MagicMock()
+    assignment.assignment_id = 100
 
-    mock_address_entity = MagicMock()
-    mock_address_class.from_dict.return_value = mock_address_entity
+    result = repository.save_assignment(assignment, commit_flag=True)
 
-    with patch.object(repository, "save_address_info", return_value=mock_address_entity) as mock_save:
-        result = repository.upsert_address(address_info, commit_flag=True)
-
-    mock_address_class.from_dict.assert_called_once_with(address_info)
-    mock_save.assert_called_once_with(mock_address_entity)
-    assert result == mock_address_entity
+    mock_session.add.assert_not_called()
+    mock_session.commit.assert_called_once()
+    mock_session.flush.assert_not_called()
+    mock_session.refresh.assert_not_called()
+    assert result == assignment
 
 
-def test_upsert_address_sqlalchemy_error_on_update(repository, mock_session):
-    address_info = {
-        "address_id": 10,
-        "city": "Dallas"
-    }
-
-    mock_query = MagicMock()
-    mock_query.get.side_effect = SQLAlchemyError("db failure")
-    mock_session.query.return_value = mock_query
+def test_save_assignment_sqlalchemy_error_on_add(repository, mock_session):
+    assignment = MagicMock()
+    assignment.assignment_id = None
+    mock_session.add.side_effect = SQLAlchemyError("db failure")
 
     with pytest.raises(DatabaseException) as exc_info:
-        repository.upsert_address(address_info, commit_flag=True)
+        repository.save_assignment(assignment, commit_flag=True)
 
     mock_session.rollback.assert_called_once()
-    assert "error adding address details" in str(exc_info.value).lower()
+    assert "Error saving Assignment details" in str(exc_info.value)
 
 
-@patch("src.repositories.assignment.address_repository.Address")
-def test_upsert_address_sqlalchemy_error_on_create(mock_address_class, repository, mock_session):
-    address_info = {
-        "city": "Dallas"
-    }
-
-    mock_address_class.from_dict.side_effect = SQLAlchemyError("db failure")
+def test_save_assignment_sqlalchemy_error_on_commit_existing(repository, mock_session):
+    assignment = MagicMock()
+    assignment.assignment_id = 100
+    mock_session.commit.side_effect = SQLAlchemyError("commit failure")
 
     with pytest.raises(DatabaseException) as exc_info:
-        repository.upsert_address(address_info, commit_flag=True)
+        repository.save_assignment(assignment, commit_flag=True)
 
     mock_session.rollback.assert_called_once()
-    assert "error adding address details" in str(exc_info.value).lower()
+    assert "Error saving Assignment details" in str(exc_info.value)
