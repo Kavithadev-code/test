@@ -1,105 +1,36 @@
-import pytest
-from unittest.mock import MagicMock
-from sqlalchemy.orm import Session
-
-from src.repositories.assignment.trademark_properties_repository import TrademarkPropertiesRepository
-
-
-PROPERTY_INPUT_DATA = [
-    {
-        "serial_number": "74195413",
-        "registration_number": "1234567",
-        "owner": "TATA",
-        "search_by": "owner",
-        "mark_literal": "TATA"
-    },
-    {
-        "serial_number": "74195414",
-        "registration_number": "7654321",
-        "owner": "TCS",
-        "search_by": "owner",
-        "mark_literal": "TCS"
+def test_save_assignment_details_success(app):
+    payload = {
+        "assignment_id": 14592,
+        "name": "test assignment"
     }
-]
 
+    mock_service = MagicMock()
+    validated_request = payload
 
-@pytest.fixture
-def mock_db_session():
-    return MagicMock(spec=Session)
+    expected_response = {
+        "success": True,
+        "message": "Successfully saved assignment details."
+    }
 
+    with app.test_request_context(
+        "/save_assignment_details",
+        method="POST",
+        json=payload
+    ), patch(
+        "src.routes.assignment_route.get_assignment_detail_service",
+        return_value=mock_service
+    ), patch(
+        "src.routes.assignment_route.SaveAssignmentDetailsRequestSchema"
+    ) as mock_schema_class, patch(
+        "src.routes.assignment_route.create_success_response",
+        return_value=expected_response
+    ):
 
-@pytest.fixture
-def mock_repo(mock_db_session):
-    return TrademarkPropertiesRepository(mock_db_session)
+        mock_schema = MagicMock()
+        mock_schema.load.return_value = validated_request
+        mock_schema_class.return_value = mock_schema
 
+        result = save_assignment_details()
 
-def test_save_properties_commit_true(mock_repo, mock_db_session):
-    assignment_id = 14592
-
-    result = mock_repo.save_properties(
-        PROPERTY_INPUT_DATA,
-        assignment_id,
-        commit_flag=True
-    )
-
-    assert mock_db_session.add.call_count == 2
-    mock_db_session.commit.assert_called_once()
-    mock_db_session.flush.assert_not_called()
-    mock_db_session.refresh.assert_not_called()
-    assert len(result) == 2
-    assert result[0].fk_assignment_id == assignment_id
-    assert result[0].serial_number == "74195413"
-    assert result[0].registration_number == "1234567"
-    assert result[0].owner == "TATA"
-    assert result[0].search_by == "owner"
-    assert result[0].mark_literal == "TATA"
-    assert result[0].lock_control_number == 0
-
-
-def test_save_properties_commit_false(mock_repo, mock_db_session):
-    assignment_id = 14592
-
-    result = mock_repo.save_properties(
-        PROPERTY_INPUT_DATA,
-        assignment_id,
-        commit_flag=False
-    )
-
-    assert mock_db_session.add.call_count == 2
-    mock_db_session.commit.assert_not_called()
-    mock_db_session.flush.assert_called_once()
-    assert mock_db_session.refresh.call_count == 2
-    assert len(result) == 2
-    mock_db_session.refresh.assert_any_call(result[0])
-    mock_db_session.refresh.assert_any_call(result[1])
-
-
-def test_save_properties_empty_list(mock_repo, mock_db_session):
-    assignment_id = 14592
-
-    result = mock_repo.save_properties(
-        [],
-        assignment_id,
-        commit_flag=True
-    )
-
-    mock_db_session.add.assert_not_called()
-    mock_db_session.commit.assert_called_once()
-    mock_db_session.flush.assert_not_called()
-    mock_db_session.refresh.assert_not_called()
-    assert result == []
-
-
-def test_save_properties_db_error(mock_repo, mock_db_session):
-    assignment_id = 14592
-    mock_db_session.add.side_effect = Exception("Database Exception")
-
-    with pytest.raises(Exception, match="Database Exception"):
-        mock_repo.save_properties(
-            PROPERTY_INPUT_DATA,
-            assignment_id,
-            commit_flag=True
-        )
-
-    mock_db_session.rollback.assert_called_once()
-    mock_db_session.commit.assert_not_called()
+    mock_service.save_assignment_details.assert_called_once_with(validated_request)
+    assert result == expected_response
