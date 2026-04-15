@@ -1,30 +1,10 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from src.repositories.assignment.conveying_party_repository import ConveyingPartyRepository
-
-
-SAVE_INPUT_DATA = {
-    "assignment_id": 16592,
-    "conveying_party_id": 0,
-    "conveying_type": "INDIVIDUAL",
-    "execution_date": "2025-05-01",
-    "citizenship_id": 100753,
-    "citizenship": "UNITED STATES",
-    "citizenship_state_id": 0,
-    "citizenship_state": "",
-    "individual": {
-        "individual_id": 60656,
-        "prefix": "",
-        "suffix": "",
-        "first_name": "tatest",
-        "last_name": "token",
-        "middle_name": ""
-    },
-    "entity": None,
-    "is_merged_entity": 0
-}
+from src.repositories.assignment.correspondence_repository import CorrespondenceRepository
+from src.exceptions.database_exception import DatabaseException
 
 
 @pytest.fixture
@@ -34,153 +14,187 @@ def mock_db_session():
 
 @pytest.fixture
 def mock_repo(mock_db_session):
-    return ConveyingPartyRepository(mock_db_session)
+    return CorrespondenceRepository(mock_db_session)
 
 
 @pytest.fixture
-def mock_conveying_party():
-    mock_obj = MagicMock()
-    mock_obj.to_dict.return_value = {
-        "assignment_id": 16592,
-        "conveying_party_id": 1,
-        "conveying_type": "INDIVIDUAL"
-    }
-    return mock_obj
+def mock_correspondence():
+    obj = MagicMock()
+    obj.correspondent_id = 101
+    return obj
 
 
-def test_save_conveying_parties_existing_commit_true(
-    mock_repo, mock_db_session, mock_conveying_party
+def test_get_correspondence_info_by_correspondent_id_found(
+    mock_repo, mock_db_session, mock_correspondence
 ):
-    input_data = SAVE_INPUT_DATA.copy()
-    input_data["conveying_party_id"] = 10
+    mock_query = MagicMock()
+    mock_query.get.return_value = mock_correspondence
+    mock_db_session.query.return_value = mock_query
 
-    mock_filter = MagicMock()
-    mock_filter.first.return_value = mock_conveying_party
-    mock_db_session.query.return_value.filter.return_value = mock_filter
-
-    result = mock_repo.save_conveying_parties(
-        input_data, type_id=1, commit_flag=True
-    )
+    result = mock_repo.get_correspondence_info_by_correspondent_id(101)
 
     mock_db_session.query.assert_called_once()
-    mock_db_session.query.return_value.filter.assert_called_once()
-    mock_filter.first.assert_called_once()
-    mock_conveying_party.set_conveying_party.assert_called_once_with(input_data, 1)
-    mock_db_session.add.assert_not_called()
-    mock_db_session.commit.assert_called_once()
-    mock_db_session.flush.assert_not_called()
-    mock_db_session.refresh.assert_not_called()
-    assert result == mock_conveying_party.to_dict.return_value
+    mock_query.get.assert_called_once_with(101)
+    assert result == mock_correspondence
 
 
-def test_save_conveying_parties_existing_commit_false(
-    mock_repo, mock_db_session, mock_conveying_party
+def test_get_correspondence_info_by_correspondent_id_not_found(
+    mock_repo, mock_db_session
 ):
-    input_data = SAVE_INPUT_DATA.copy()
-    input_data["conveying_party_id"] = 10
+    mock_query = MagicMock()
+    mock_query.get.return_value = None
+    mock_db_session.query.return_value = mock_query
 
-    mock_filter = MagicMock()
-    mock_filter.first.return_value = mock_conveying_party
-    mock_db_session.query.return_value.filter.return_value = mock_filter
-
-    result = mock_repo.save_conveying_parties(
-        input_data, type_id=1, commit_flag=False
-    )
+    result = mock_repo.get_correspondence_info_by_correspondent_id(101)
 
     mock_db_session.query.assert_called_once()
-    mock_db_session.query.return_value.filter.assert_called_once()
-    mock_filter.first.assert_called_once()
-    mock_conveying_party.set_conveying_party.assert_called_once_with(input_data, 1)
-    mock_db_session.add.assert_not_called()
-    mock_db_session.commit.assert_not_called()
-    mock_db_session.flush.assert_called_once()
-    mock_db_session.refresh.assert_called_once_with(mock_conveying_party)
-    assert result == mock_conveying_party.to_dict.return_value
-
-
-@patch("src.repositories.assignment.conveying_party_repository.ConveyingParty")
-def test_save_conveying_parties_new_commit_true(
-    mock_conveying_party_class, mock_repo, mock_db_session
-):
-    input_data = SAVE_INPUT_DATA.copy()
-    input_data["conveying_party_id"] = 0
-
-    new_entity = MagicMock()
-    new_entity.to_dict.return_value = {
-        "assignment_id": 16592,
-        "conveying_party_id": 99,
-        "conveying_type": "INDIVIDUAL"
-    }
-    mock_conveying_party_class.from_dict.return_value = new_entity
-
-    result = mock_repo.save_conveying_parties(
-        input_data, type_id=1, commit_flag=True
-    )
-
-    mock_conveying_party_class.from_dict.assert_called_once_with(input_data, 1)
-    mock_db_session.add.assert_called_once_with(new_entity)
-    mock_db_session.commit.assert_called_once()
-    mock_db_session.flush.assert_not_called()
-    mock_db_session.refresh.assert_not_called()
-    assert result == new_entity.to_dict.return_value
-
-
-@patch("src.repositories.assignment.conveying_party_repository.ConveyingParty")
-def test_save_conveying_parties_new_commit_false(
-    mock_conveying_party_class, mock_repo, mock_db_session
-):
-    input_data = SAVE_INPUT_DATA.copy()
-    input_data["conveying_party_id"] = 0
-
-    new_entity = MagicMock()
-    new_entity.to_dict.return_value = {
-        "assignment_id": 16592,
-        "conveying_party_id": 99,
-        "conveying_type": "INDIVIDUAL"
-    }
-    mock_conveying_party_class.from_dict.return_value = new_entity
-
-    result = mock_repo.save_conveying_parties(
-        input_data, type_id=1, commit_flag=False
-    )
-
-    mock_conveying_party_class.from_dict.assert_called_once_with(input_data, 1)
-    mock_db_session.add.assert_called_once_with(new_entity)
-    mock_db_session.commit.assert_not_called()
-    mock_db_session.flush.assert_called_once()
-    mock_db_session.refresh.assert_called_once_with(new_entity)
-    assert result == new_entity.to_dict.return_value
-
-
-@patch("src.repositories.assignment.conveying_party_repository.ConveyingParty")
-def test_save_conveying_parties_returns_none_when_saved_entity_none(
-    mock_conveying_party_class, mock_repo, mock_db_session
-):
-    input_data = SAVE_INPUT_DATA.copy()
-    input_data["conveying_party_id"] = 0
-
-    mock_conveying_party_class.from_dict.return_value = None
-
-    result = mock_repo.save_conveying_parties(
-        input_data, type_id=1, commit_flag=True
-    )
-
-    mock_conveying_party_class.from_dict.assert_called_once_with(input_data, 1)
-    mock_db_session.add.assert_called_once_with(None)
-    mock_db_session.commit.assert_called_once()
+    mock_query.get.assert_called_once_with(101)
     assert result is None
 
 
-def test_save_conveying_parties_db_error(mock_repo, mock_db_session):
-    input_data = SAVE_INPUT_DATA.copy()
-    input_data["conveying_party_id"] = 10
+def test_get_correspondence_info_by_correspondent_id_exception(
+    mock_repo, mock_db_session
+):
+    mock_db_session.query.side_effect = Exception("db error")
 
-    mock_db_session.query.side_effect = Exception("Database Exception")
+    with pytest.raises(DatabaseException) as exc_info:
+        mock_repo.get_correspondence_info_by_correspondent_id(101)
 
-    with pytest.raises(Exception, match="Database Exception"):
-        mock_repo.save_conveying_parties(
-            input_data, type_id=1, commit_flag=True
+    assert "Unable to get Correspondent Info" in str(exc_info.value)
+
+
+def test_get_correspondence_info_by_assignment_id_found(
+    mock_repo, mock_db_session, mock_correspondence
+):
+    mock_filter = MagicMock()
+    mock_filter.first.return_value = mock_correspondence
+    mock_db_session.query.return_value.filter.return_value = mock_filter
+
+    result = mock_repo.get_correspondence_info_by_assignment_id(200)
+
+    mock_db_session.query.assert_called_once()
+    mock_db_session.query.return_value.filter.assert_called_once()
+    mock_filter.first.assert_called_once()
+    assert result == mock_correspondence
+
+
+def test_get_correspondence_info_by_assignment_id_not_found(
+    mock_repo, mock_db_session
+):
+    mock_filter = MagicMock()
+    mock_filter.first.return_value = None
+    mock_db_session.query.return_value.filter.return_value = mock_filter
+
+    result = mock_repo.get_correspondence_info_by_assignment_id(200)
+
+    mock_db_session.query.assert_called_once()
+    mock_db_session.query.return_value.filter.assert_called_once()
+    mock_filter.first.assert_called_once()
+    assert result is None
+
+
+def test_get_correspondence_info_by_assignment_id_exception(
+    mock_repo, mock_db_session
+):
+    mock_db_session.query.side_effect = Exception("db error")
+
+    with pytest.raises(DatabaseException) as exc_info:
+        mock_repo.get_correspondence_info_by_assignment_id(200)
+
+    assert "Unable to get Correspondent Info" in str(exc_info.value)
+
+
+def test_save_correspondence_info_new_commit_true(
+    mock_repo, mock_db_session
+):
+    correspondence = MagicMock()
+    correspondence.correspondent_id = None
+
+    result = mock_repo.save_correspondence_info(
+        correspondence, commit_flag=True
+    )
+
+    mock_db_session.add.assert_called_once_with(correspondence)
+    mock_db_session.commit.assert_called_once()
+    mock_db_session.flush.assert_not_called()
+    assert result == correspondence
+
+
+def test_save_correspondence_info_new_commit_false(
+    mock_repo, mock_db_session
+):
+    correspondence = MagicMock()
+    correspondence.correspondent_id = None
+
+    result = mock_repo.save_correspondence_info(
+        correspondence, commit_flag=False
+    )
+
+    mock_db_session.add.assert_called_once_with(correspondence)
+    mock_db_session.commit.assert_not_called()
+    mock_db_session.flush.assert_called_once()
+    assert result == correspondence
+
+
+def test_save_correspondence_info_existing_commit_true(
+    mock_repo, mock_db_session
+):
+    correspondence = MagicMock()
+    correspondence.correspondent_id = 55
+
+    result = mock_repo.save_correspondence_info(
+        correspondence, commit_flag=True
+    )
+
+    mock_db_session.add.assert_not_called()
+    mock_db_session.commit.assert_called_once()
+    mock_db_session.flush.assert_not_called()
+    assert result == correspondence
+
+
+def test_save_correspondence_info_existing_commit_false(
+    mock_repo, mock_db_session
+):
+    correspondence = MagicMock()
+    correspondence.correspondent_id = 55
+
+    result = mock_repo.save_correspondence_info(
+        correspondence, commit_flag=False
+    )
+
+    mock_db_session.add.assert_not_called()
+    mock_db_session.commit.assert_called_once()
+    mock_db_session.flush.assert_not_called()
+    assert result == correspondence
+
+
+def test_save_correspondence_info_sqlalchemy_error_on_add(
+    mock_repo, mock_db_session
+):
+    correspondence = MagicMock()
+    correspondence.correspondent_id = None
+    mock_db_session.add.side_effect = SQLAlchemyError("db failure")
+
+    with pytest.raises(DatabaseException) as exc_info:
+        mock_repo.save_correspondence_info(
+            correspondence, commit_flag=True
         )
 
     mock_db_session.rollback.assert_called_once()
-    mock_db_session.commit.assert_not_called()
+    assert "Error saving Assignment details" in str(exc_info.value)
+
+
+def test_save_correspondence_info_sqlalchemy_error_on_commit(
+    mock_repo, mock_db_session
+):
+    correspondence = MagicMock()
+    correspondence.correspondent_id = 99
+    mock_db_session.commit.side_effect = SQLAlchemyError("commit failure")
+
+    with pytest.raises(DatabaseException) as exc_info:
+        mock_repo.save_correspondence_info(
+            correspondence, commit_flag=True
+        )
+
+    mock_db_session.rollback.assert_called_once()
+    assert "Error saving Assignment details" in str(exc_info.value)
