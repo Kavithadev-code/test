@@ -1,7 +1,116 @@
-   "entity_id": None,
-        "entity_name": "Test Entity",
-        "formerly": "",
-        "formerly_name": "",
-        "assumed_name_type": "",
-        "other_name": "",
-        "legal_entity_type_id": 1
+import pytest
+from unittest.mock import MagicMock, patch
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
+from src.repositories.assignment.individual_email_info_repository import (
+    IndividualEmailInfoRepository,
+)
+from src.exceptions.database_exception import DatabaseException
+
+
+EMAIL_INPUT_DATA = [
+    {
+        "email": "primary@test.com",
+        "isPrimaryEmail": True,
+    },
+    {
+        "email": "secondary@test.com",
+        "isPrimaryEmail": False,
+    },
+]
+
+
+@pytest.fixture
+def mock_db_session():
+    return MagicMock(spec=Session)
+
+
+@pytest.fixture
+def mock_repo(mock_db_session):
+    return IndividualEmailInfoRepository(mock_db_session)
+
+
+@patch("src.repositories.assignment.individual_email_info_repository.IndividualEmailInfo")
+def test_save_individual_email_info_commit_true(
+    mock_email_class, mock_repo, mock_db_session
+):
+    email_obj_1 = MagicMock()
+    email_obj_2 = MagicMock()
+    mock_email_class.side_effect = [email_obj_1, email_obj_2]
+
+    result = mock_repo.save_individual_email_info(
+        EMAIL_INPUT_DATA,
+        individual_id=101,
+        commit_flag=True,
+    )
+
+    assert mock_email_class.call_count == 2
+    mock_email_class.assert_any_call(
+        email="primary@test.com",
+        is_primary_email=True,
+        fk_individual_id=101,
+    )
+    mock_email_class.assert_any_call(
+        email="secondary@test.com",
+        is_primary_email=False,
+        fk_individual_id=101,
+    )
+
+    assert mock_db_session.add.call_count == 2
+    mock_db_session.add.assert_any_call(email_obj_1)
+    mock_db_session.add.assert_any_call(email_obj_2)
+    mock_db_session.commit.assert_called_once()
+    mock_db_session.flush.assert_not_called()
+    assert result == [email_obj_1, email_obj_2]
+
+
+@patch("src.repositories.assignment.individual_email_info_repository.IndividualEmailInfo")
+def test_save_individual_email_info_commit_false(
+    mock_email_class, mock_repo, mock_db_session
+):
+    email_obj_1 = MagicMock()
+    email_obj_2 = MagicMock()
+    mock_email_class.side_effect = [email_obj_1, email_obj_2]
+
+    result = mock_repo.save_individual_email_info(
+        EMAIL_INPUT_DATA,
+        individual_id=101,
+        commit_flag=False,
+    )
+
+    assert mock_email_class.call_count == 2
+    assert mock_db_session.add.call_count == 2
+    mock_db_session.commit.assert_not_called()
+    mock_db_session.flush.assert_called_once()
+    assert result == [email_obj_1, email_obj_2]
+
+
+def test_save_individual_email_info_empty_list(mock_repo, mock_db_session):
+    result = mock_repo.save_individual_email_info(
+        [],
+        individual_id=101,
+        commit_flag=True,
+    )
+
+    mock_db_session.add.assert_not_called()
+    mock_db_session.commit.assert_called_once()
+    mock_db_session.flush.assert_not_called()
+    assert result == []
+
+
+@patch("src.repositories.assignment.individual_email_info_repository.IndividualEmailInfo")
+def test_save_individual_email_info_sqlalchemy_error(
+    mock_email_class, mock_repo, mock_db_session
+):
+    mock_email_class.side_effect = SQLAlchemyError("db failure")
+
+    with pytest.raises(DatabaseException) as exc_info:
+        mock_repo.save_individual_email_info(
+            EMAIL_INPUT_DATA,
+            individual_id=101,
+            commit_flag=True,
+        )
+
+    mock_db_session.rollback.assert_called_once()
+    assert "Error saving IndividualEmailInfo details" in str(exc_info.value)
