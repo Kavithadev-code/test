@@ -1,36 +1,5 @@
-def test_save_assignment_details_success(app):
-    payload = {
-        "assignment_id": 14592,
-        "name": "test assignment"
-    }
+result = save_assignment_details()
 
-    mock_service = MagicMock()
-    validated_request = payload
-
-    expected_response = {
-        "success": True,
-        "message": "Successfully saved assignment details."
-    }
-
-    with app.test_request_context(
-        "/save_assignment_details",
-        method="POST",
-        json=payload
-    ), patch(
-        "src.routes.assignment_route.get_assignment_detail_service",
-        return_value=mock_service
-    ), patch(
-        "src.routes.assignment_route.SaveAssignmentDetailsRequestSchema"
-    ) as mock_schema_class, patch(
-        "src.routes.assignment_route.create_success_response",
-        return_value=expected_response
-    ):
-
-        mock_schema = MagicMock()
-        mock_schema.load.return_value = validated_request
-        mock_schema_class.return_value = mock_schema
-
-        result = save_assignment_details()
-
-    mock_service.save_assignment_details.assert_called_once_with(validated_request)
-    assert result == expected_response
+mock_schema.load.assert_called_once_with(payload)
+mock_service.save_assignment_details.assert_called_once_with(validated_request)
+assert result == expected_response
