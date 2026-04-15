@@ -1,256 +1,208 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
 
-from src.repositories.assignment.individual_repository import IndividualRepository
-from src.exceptions.database_exception import DatabaseException
+from src.repositories.assignment.receiving_party_repository import ReceivingPartyRepository
 
 
-INDIVIDUAL_INPUT_DATA = {
-    "individual_id": 10,
-    "prefix": "Mr",
-    "first_name": "John",
-    "middle_name": "A",
-    "last_name": "Doe",
-    "suffix": "Jr"
+SAVE_INPUT_DATA = {
+    "receiving_party_id": 10,
+    "name": "ABC Corp"
 }
 
 
 @pytest.fixture
 def mock_db_session():
-    return MagicMock(spec=Session)
+    return MagicMock()
 
 
 @pytest.fixture
 def mock_repo(mock_db_session):
-    return IndividualRepository(mock_db_session)
+    return ReceivingPartyRepository(mock_db_session)
 
 
 @pytest.fixture
-def mock_individual():
+def mock_receiving_party():
     obj = MagicMock()
-    obj.individual_id = 10
+    obj.to_dict.return_value = {
+        "receiving_party_id": 10,
+        "name": "ABC Corp"
+    }
     return obj
 
 
-def test_save_individual_info_new_commit_true(mock_repo, mock_db_session):
-    individual = MagicMock()
-    individual.individual_id = None
+def test_save_receiving_parties_existing_commit_true(
+    mock_repo, mock_db_session, mock_receiving_party
+):
+    input_data = SAVE_INPUT_DATA.copy()
+    input_data["receiving_party_id"] = 10
 
-    result = mock_repo.save_individual_info(individual, commit_flag=True)
+    mock_filter = MagicMock()
+    mock_filter.first.return_value = mock_receiving_party
+    mock_db_session.query.return_value.filter.return_value = mock_filter
 
-    mock_db_session.add.assert_called_once_with(individual)
+    result = mock_repo.save_receiving_parties(
+        input_data,
+        type_id=1,
+        address_id=100,
+        domestic_individual_id=200,
+        domestic_address_info_id=300,
+        commit_flag=True,
+    )
+
+    mock_db_session.query.assert_called_once()
+    mock_db_session.query.return_value.filter.assert_called_once()
+    mock_filter.first.assert_called_once()
+    mock_receiving_party.set_receiving_party.assert_called_once_with(
+        input_data, 1, 100, 200, 300
+    )
+    mock_db_session.add.assert_not_called()
     mock_db_session.commit.assert_called_once()
     mock_db_session.flush.assert_not_called()
     mock_db_session.refresh.assert_not_called()
-    assert result == individual
+    assert result == mock_receiving_party.to_dict.return_value
 
 
-def test_save_individual_info_new_commit_false(mock_repo, mock_db_session):
-    individual = MagicMock()
-    individual.individual_id = None
+def test_save_receiving_parties_existing_commit_false(
+    mock_repo, mock_db_session, mock_receiving_party
+):
+    input_data = SAVE_INPUT_DATA.copy()
+    input_data["receiving_party_id"] = 10
 
-    result = mock_repo.save_individual_info(individual, commit_flag=False)
+    mock_filter = MagicMock()
+    mock_filter.first.return_value = mock_receiving_party
+    mock_db_session.query.return_value.filter.return_value = mock_filter
 
-    mock_db_session.add.assert_called_once_with(individual)
-    mock_db_session.commit.assert_not_called()
-    mock_db_session.flush.assert_called_once()
-    mock_db_session.refresh.assert_called_once_with(individual)
-    assert result == individual
+    result = mock_repo.save_receiving_parties(
+        input_data,
+        type_id=1,
+        address_id=100,
+        domestic_individual_id=200,
+        domestic_address_info_id=300,
+        commit_flag=False,
+    )
 
-
-def test_save_individual_info_existing_individual(mock_repo, mock_db_session):
-    individual = MagicMock()
-    individual.individual_id = 25
-
-    result = mock_repo.save_individual_info(individual, commit_flag=True)
-
+    mock_db_session.query.assert_called_once()
+    mock_db_session.query.return_value.filter.assert_called_once()
+    mock_filter.first.assert_called_once()
+    mock_receiving_party.set_receiving_party.assert_called_once_with(
+        input_data, 1, 100, 200, 300
+    )
     mock_db_session.add.assert_not_called()
     mock_db_session.commit.assert_not_called()
+    mock_db_session.flush.assert_called_once()
+    mock_db_session.refresh.assert_called_once_with(mock_receiving_party)
+    assert result == mock_receiving_party.to_dict.return_value
+
+
+@patch("src.repositories.assignment.receiving_party_repository.ReceivingParty")
+def test_save_receiving_parties_new_commit_true(
+    mock_receiving_party_class, mock_repo, mock_db_session
+):
+    input_data = SAVE_INPUT_DATA.copy()
+    input_data["receiving_party_id"] = 0
+
+    new_entity = MagicMock()
+    new_entity.to_dict.return_value = {
+        "receiving_party_id": 11,
+        "name": "ABC Corp"
+    }
+    mock_receiving_party_class.from_dict.return_value = new_entity
+
+    result = mock_repo.save_receiving_parties(
+        input_data,
+        type_id=1,
+        address_id=100,
+        domestic_individual_id=200,
+        domestic_address_info_id=300,
+        commit_flag=True,
+    )
+
+    mock_receiving_party_class.from_dict.assert_called_once_with(
+        input_data, 1, 100, 200, 300
+    )
+    mock_db_session.add.assert_called_once_with(new_entity)
+    mock_db_session.commit.assert_called_once()
     mock_db_session.flush.assert_not_called()
     mock_db_session.refresh.assert_not_called()
-    assert result == individual
+    assert result == new_entity.to_dict.return_value
 
 
-def test_save_individual_info_sqlalchemy_error_on_add(mock_repo, mock_db_session):
-    individual = MagicMock()
-    individual.individual_id = None
-    mock_db_session.add.side_effect = SQLAlchemyError("db failure")
+@patch("src.repositories.assignment.receiving_party_repository.ReceivingParty")
+def test_save_receiving_parties_new_commit_false(
+    mock_receiving_party_class, mock_repo, mock_db_session
+):
+    input_data = SAVE_INPUT_DATA.copy()
+    input_data["receiving_party_id"] = 0
 
-    with pytest.raises(DatabaseException) as exc_info:
-        mock_repo.save_individual_info(individual, commit_flag=True)
+    new_entity = MagicMock()
+    new_entity.to_dict.return_value = {
+        "receiving_party_id": 11,
+        "name": "ABC Corp"
+    }
+    mock_receiving_party_class.from_dict.return_value = new_entity
 
-    mock_db_session.rollback.assert_called_once()
-    assert "Error saving Individual Name details" in str(exc_info.value)
+    result = mock_repo.save_receiving_parties(
+        input_data,
+        type_id=1,
+        address_id=100,
+        domestic_individual_id=200,
+        domestic_address_info_id=300,
+        commit_flag=False,
+    )
+
+    mock_receiving_party_class.from_dict.assert_called_once_with(
+        input_data, 1, 100, 200, 300
+    )
+    mock_db_session.add.assert_called_once_with(new_entity)
+    mock_db_session.commit.assert_not_called()
+    mock_db_session.flush.assert_called_once()
+    mock_db_session.refresh.assert_called_once_with(new_entity)
+    assert result == new_entity.to_dict.return_value
 
 
-def test_save_individual_info_sqlalchemy_error_on_flush(mock_repo, mock_db_session):
-    individual = MagicMock()
-    individual.individual_id = None
-    mock_db_session.flush.side_effect = SQLAlchemyError("flush failure")
+@patch("src.repositories.assignment.receiving_party_repository.ReceivingParty")
+def test_save_receiving_parties_returns_none_when_saved_entity_none(
+    mock_receiving_party_class, mock_repo, mock_db_session
+):
+    input_data = SAVE_INPUT_DATA.copy()
+    input_data["receiving_party_id"] = 0
 
-    with pytest.raises(DatabaseException) as exc_info:
-        mock_repo.save_individual_info(individual, commit_flag=False)
+    mock_receiving_party_class.from_dict.return_value = None
 
-    mock_db_session.rollback.assert_called_once()
-    assert "Error saving Individual Name details" in str(exc_info.value)
+    result = mock_repo.save_receiving_parties(
+        input_data,
+        type_id=1,
+        address_id=100,
+        domestic_individual_id=200,
+        domestic_address_info_id=300,
+        commit_flag=True,
+    )
 
-
-def test_upsert_individual_update_existing(mock_repo, mock_db_session, mock_individual):
-    input_data = INDIVIDUAL_INPUT_DATA.copy()
-    input_data["individual_id"] = 10
-
-    mock_query = MagicMock()
-    mock_query.get.return_value = mock_individual
-    mock_db_session.query.return_value = mock_query
-
-    result = mock_repo.upsert_individual(input_data, commit_flag=True)
-
-    mock_db_session.query.assert_called_once()
-    mock_query.get.assert_called_once_with(10)
-    mock_individual.set_individual.assert_called_once_with(input_data)
+    mock_receiving_party_class.from_dict.assert_called_once_with(
+        input_data, 1, 100, 200, 300
+    )
+    mock_db_session.add.assert_called_once_with(None)
     mock_db_session.commit.assert_called_once()
-    assert result == mock_individual
-
-
-def test_upsert_individual_create_new(mock_repo):
-    input_data = {
-        "individual_id": 0,
-        "prefix": "Mr",
-        "first_name": "John",
-        "middle_name": "A",
-        "last_name": "Doe",
-        "suffix": "Jr"
-    }
-
-    new_individual = MagicMock()
-
-    with patch(
-        "src.repositories.assignment.individual_repository.Individual.from_dict",
-        return_value=new_individual
-    ) as mock_from_dict, patch.object(
-        mock_repo, "save_individual_info", return_value=new_individual
-    ) as mock_save:
-        result = mock_repo.upsert_individual(input_data, commit_flag=True)
-
-    mock_from_dict.assert_called_once_with(input_data)
-    mock_save.assert_called_once_with(new_individual, True)
-    assert result == new_individual
-
-
-def test_upsert_individual_create_new_with_none_id(mock_repo):
-    input_data = {
-        "individual_id": None,
-        "prefix": "Ms",
-        "first_name": "Jane",
-        "middle_name": "",
-        "last_name": "Doe",
-        "suffix": ""
-    }
-
-    new_individual = MagicMock()
-
-    with patch(
-        "src.repositories.assignment.individual_repository.Individual.from_dict",
-        return_value=new_individual
-    ) as mock_from_dict, patch.object(
-        mock_repo, "save_individual_info", return_value=new_individual
-    ) as mock_save:
-        result = mock_repo.upsert_individual(input_data, commit_flag=False)
-
-    mock_from_dict.assert_called_once_with(input_data)
-    mock_save.assert_called_once_with(new_individual, False)
-    assert result == new_individual
-
-
-def test_upsert_individual_sqlalchemy_error_on_update(mock_repo, mock_db_session):
-    input_data = INDIVIDUAL_INPUT_DATA.copy()
-    input_data["individual_id"] = 10
-
-    mock_query = MagicMock()
-    mock_query.get.side_effect = SQLAlchemyError("db failure")
-    mock_db_session.query.return_value = mock_query
-
-    with pytest.raises(DatabaseException) as exc_info:
-        mock_repo.upsert_individual(input_data, commit_flag=True)
-
-    mock_db_session.rollback.assert_called_once()
-    assert "error saving Individual details" in str(exc_info.value)
-
-
-def test_upsert_individual_sqlalchemy_error_on_commit(
-    mock_repo, mock_db_session, mock_individual
-):
-    input_data = INDIVIDUAL_INPUT_DATA.copy()
-    input_data["individual_id"] = 10
-
-    mock_query = MagicMock()
-    mock_query.get.return_value = mock_individual
-    mock_db_session.query.return_value = mock_query
-    mock_db_session.commit.side_effect = SQLAlchemyError("commit failure")
-
-    with pytest.raises(DatabaseException) as exc_info:
-        mock_repo.upsert_individual(input_data, commit_flag=True)
-
-    mock_db_session.rollback.assert_called_once()
-    assert "error saving Individual details" in str(exc_info.value)
-
-
-def test_upsert_individual_sqlalchemy_error_on_create(mock_repo):
-    input_data = {
-        "individual_id": 0,
-        "prefix": "Mr",
-        "first_name": "John",
-        "middle_name": "A",
-        "last_name": "Doe",
-        "suffix": "Jr"
-    }
-
-    with patch(
-        "src.repositories.assignment.individual_repository.Individual.from_dict",
-        side_effect=SQLAlchemyError("db failure")
-    ):
-        with pytest.raises(DatabaseException) as exc_info:
-            mock_repo.upsert_individual(input_data, commit_flag=True)
-
-    assert "error saving Individual details" in str(exc_info.value)
-
-
-def test_get_individual_info_by_individual_id_found(
-    mock_repo, mock_db_session, mock_individual
-):
-    mock_query = MagicMock()
-    mock_query.get.return_value = mock_individual
-    mock_db_session.query.return_value = mock_query
-
-    result = mock_repo.get_individual_info_by_individual_id(10)
-
-    mock_db_session.query.assert_called_once()
-    mock_query.get.assert_called_once_with(10)
-    assert result == mock_individual
-
-
-def test_get_individual_info_by_individual_id_not_found(
-    mock_repo, mock_db_session
-):
-    mock_query = MagicMock()
-    mock_query.get.return_value = None
-    mock_db_session.query.return_value = mock_query
-
-    result = mock_repo.get_individual_info_by_individual_id(10)
-
-    mock_db_session.query.assert_called_once()
-    mock_query.get.assert_called_once_with(10)
     assert result is None
 
 
-def test_get_individual_info_by_individual_id_exception(
+def test_save_receiving_parties_exception_rolls_back(
     mock_repo, mock_db_session
 ):
-    mock_db_session.query.side_effect = Exception("db error")
+    input_data = SAVE_INPUT_DATA.copy()
+    input_data["receiving_party_id"] = 10
 
-    with pytest.raises(DatabaseException) as exc_info:
-        mock_repo.get_individual_info_by_individual_id(10)
+    mock_db_session.query.side_effect = Exception("Database Exception")
 
-    assert "Unable to get Individual Names Info" in str(exc_info.value)
+    with pytest.raises(Exception, match="Database Exception"):
+        mock_repo.save_receiving_parties(
+            input_data,
+            type_id=1,
+            address_id=100,
+            domestic_individual_id=200,
+            domestic_address_info_id=300,
+            commit_flag=True,
+        )
+
+    mock_db_session.rollback.assert_called_once()
+    mock_db_session.commit.assert_not_called()
