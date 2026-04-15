@@ -1,158 +1,183 @@
 import pytest
-from types import SimpleNamespace
-from your_module.correspondent import Correspondent
+from unittest.mock import MagicMock, patch
+from sqlalchemy.exc import SQLAlchemyError
+
+from src.repositories.assignment.address_repository import AddressRepository
+from src.exceptions.database_exception import DatabaseException
 
 
 @pytest.fixture
-def correspondent():
-    return Correspondent()
+def mock_session():
+    return MagicMock()
 
 
-# -------------------------------
-# ADDRESS TESTS
-# -------------------------------
-
-def test_get_address_info_dto_none(correspondent):
-    correspondent.address = None
-    assert correspondent.get_address_info_dto() is None
+@pytest.fixture
+def repository(mock_session):
+    return AddressRepository(mock_session)
 
 
-def test_get_address_info_dto_success(correspondent):
-    correspondent.address = SimpleNamespace(
-        country="US",
-        address_line1="Line1",
-        address_line2="Line2",
-        city="NY",
-        state="NY",
-        zipCode="10001",
-        attention="Test",
-        state_id=1,
-        country_id=91
-    )
+def test_save_address_info_new_address(repository, mock_session):
+    address = MagicMock()
+    address.address_id = None
 
-    result = correspondent.get_address_info_dto()
+    result = repository.save_address_info(address)
 
-    assert result["country"] == "US"
-    assert result["addressLineOne"] == "Line1"
-    assert result["city"] == "NY"
-    assert result["zipCode"] == "10001"
+    mock_session.add.assert_called_once_with(address)
+    mock_session.commit.assert_called_once()
+    assert result == address
 
 
-# -------------------------------
-# INDIVIDUAL TESTS
-# -------------------------------
+def test_save_address_info_existing_address(repository, mock_session):
+    address = MagicMock()
+    address.address_id = 101
 
-def test_get_individual_info_none(correspondent):
-    correspondent.individual = None
-    assert correspondent.get_individual_info_dto() is None
+    result = repository.save_address_info(address)
 
-
-def test_get_individual_info_success(correspondent):
-    correspondent.individual = SimpleNamespace(
-        prefix="Mr",
-        first_name="John",
-        middle_name="A",
-        last_name="Doe",
-        suffix="Jr"
-    )
-
-    result = correspondent.get_individual_info_dto()
-
-    assert result["firstName"] == "John"
-    assert result["middleName"] == "A"
-    assert result["lastName"] == "Doe"
+    mock_session.add.assert_not_called()
+    mock_session.commit.assert_called_once()
+    assert result == address
 
 
-# -------------------------------
-# EMAIL TESTS
-# -------------------------------
+def test_save_address_info_sqlalchemy_error(repository, mock_session):
+    address = MagicMock()
+    address.address_id = None
+    mock_session.add.side_effect = SQLAlchemyError("db error")
 
-def test_get_email_none(correspondent):
-    correspondent.individual = SimpleNamespace(
-        individual_email_info=None
-    )
-    assert correspondent.get_email() is None
+    with pytest.raises(DatabaseException) as exc_info:
+        repository.save_address_info(address)
 
-
-def test_get_email_success(correspondent):
-    correspondent.individual = SimpleNamespace(
-        individual_email_info=[
-            SimpleNamespace(email="test@mail.com", is_primary_email=True),
-            SimpleNamespace(email="test2@mail.com", is_primary_email=False)
-        ]
-    )
-
-    result = correspondent.get_email()
-
-    assert len(result) == 2
-    assert result[0]["email"] == "test@mail.com"
-    assert result[0]["isPrimaryEmail"] is True
+    mock_session.rollback.assert_called_once()
+    assert "Error saving Address details" in str(exc_info.value)
 
 
-# -------------------------------
-# PHONE TESTS
-# -------------------------------
+def test_get_address_info_by_address_id_found(repository, mock_session):
+    address_id = 123
+    mock_address = MagicMock()
 
-def test_get_phones_none(correspondent):
-    correspondent.individual = SimpleNamespace(
-        individual_phone_info=None
-    )
-    assert correspondent.get_phones() is None
+    mock_query = MagicMock()
+    mock_query.get.return_value = mock_address
+    mock_session.query.return_value = mock_query
 
+    result = repository.get_address_info_by_address_id(address_id)
 
-def test_get_phones_success(correspondent):
-    correspondent.individual = SimpleNamespace(
-        individual_phone_info=[
-            SimpleNamespace(phone_type="mobile", phone="123", phone_extension="001"),
-            SimpleNamespace(phone_type="home", phone="456", phone_extension=None)
-        ]
-    )
-
-    result = correspondent.get_phones()
-
-    assert len(result) == 2
-    assert result[0]["type"] == "mobile"
-    assert result[0]["phoneNumber"] == "123"
+    mock_session.query.assert_called_once()
+    mock_query.get.assert_called_once_with(address_id)
+    assert result == mock_address
 
 
-# -------------------------------
-# FINAL AGGREGATION TEST
-# -------------------------------
+def test_get_address_info_by_address_id_not_found(repository, mock_session):
+    address_id = 123
 
-def test_get_assignment_correspondent_info(correspondent):
-    correspondent.correspondent_id = 10
-    correspondent.docket_number = "DKT123"
+    mock_query = MagicMock()
+    mock_query.get.return_value = None
+    mock_session.query.return_value = mock_query
 
-    correspondent.address = SimpleNamespace(
-        country="US",
-        address_line1="Line1",
-        address_line2=None,
-        city="NY",
-        state="NY",
-        zipCode="10001",
-        attention=None,
-        state_id=1,
-        country_id=91
-    )
+    result = repository.get_address_info_by_address_id(address_id)
 
-    correspondent.individual = SimpleNamespace(
-        prefix="Mr",
-        first_name="John",
-        middle_name=None,
-        last_name="Doe",
-        suffix=None,
-        individual_email_info=[
-            SimpleNamespace(email="test@mail.com", is_primary_email=True)
-        ],
-        individual_phone_info=[
-            SimpleNamespace(phone_type="mobile", phone="123", phone_extension="001")
-        ]
-    )
+    mock_query.get.assert_called_once_with(address_id)
+    assert result is None
 
-    result = correspondent.get_assignment_correspondent_info()
 
-    assert result["correspondentId"] == 10
-    assert result["docketNumber"] == "DKT123"
-    assert result["name"]["firstName"] == "John"
-    assert result["emails"][0]["email"] == "test@mail.com"
-    assert result["phones"][0]["phoneNumber"] == "123"
+def test_get_address_info_by_address_id_exception(repository, mock_session):
+    mock_session.query.side_effect = Exception("unexpected error")
+
+    with pytest.raises(DatabaseException) as exc_info:
+        repository.get_address_info_by_address_id(123)
+
+    assert "Unable to get Address Info" in str(exc_info.value)
+
+
+def test_upsert_address_update_with_commit_true(repository, mock_session):
+    address_info = {
+        "address_id": 10,
+        "city": "Dallas",
+        "state": "TX"
+    }
+
+    mock_address = MagicMock()
+
+    mock_query = MagicMock()
+    mock_query.get.return_value = mock_address
+    mock_session.query.return_value = mock_query
+
+    result = repository.upsert_address(address_info, commit_flag=True)
+
+    mock_session.query.assert_called_once()
+    mock_query.get.assert_called_once_with(10)
+    mock_address.set_address.assert_called_once_with(address_info)
+    mock_session.commit.assert_called_once()
+    mock_session.flush.assert_not_called()
+    mock_session.refresh.assert_not_called()
+    assert result == mock_address
+
+
+def test_upsert_address_update_with_commit_false(repository, mock_session):
+    address_info = {
+        "address_id": 10,
+        "city": "Dallas",
+        "state": "TX"
+    }
+
+    mock_address = MagicMock()
+
+    mock_query = MagicMock()
+    mock_query.get.return_value = mock_address
+    mock_session.query.return_value = mock_query
+
+    result = repository.upsert_address(address_info, commit_flag=False)
+
+    mock_address.set_address.assert_called_once_with(address_info)
+    mock_session.commit.assert_not_called()
+    mock_session.flush.assert_called_once()
+    mock_session.refresh.assert_called_once_with(mock_address)
+    assert result == mock_address
+
+
+@patch("src.repositories.assignment.address_repository.Address")
+def test_upsert_address_create_new_address(mock_address_class, repository):
+    address_info = {
+        "city": "Dallas",
+        "state": "TX"
+    }
+
+    mock_address_entity = MagicMock()
+    mock_address_class.from_dict.return_value = mock_address_entity
+
+    with patch.object(repository, "save_address_info", return_value=mock_address_entity) as mock_save:
+        result = repository.upsert_address(address_info, commit_flag=True)
+
+    mock_address_class.from_dict.assert_called_once_with(address_info)
+    mock_save.assert_called_once_with(mock_address_entity)
+    assert result == mock_address_entity
+
+
+def test_upsert_address_sqlalchemy_error_on_update(repository, mock_session):
+    address_info = {
+        "address_id": 10,
+        "city": "Dallas"
+    }
+
+    mock_query = MagicMock()
+    mock_query.get.side_effect = SQLAlchemyError("db failure")
+    mock_session.query.return_value = mock_query
+
+    with pytest.raises(DatabaseException) as exc_info:
+        repository.upsert_address(address_info, commit_flag=True)
+
+    mock_session.rollback.assert_called_once()
+    assert "error adding address details" in str(exc_info.value).lower()
+
+
+@patch("src.repositories.assignment.address_repository.Address")
+def test_upsert_address_sqlalchemy_error_on_create(mock_address_class, repository, mock_session):
+    address_info = {
+        "city": "Dallas"
+    }
+
+    mock_address_class.from_dict.side_effect = SQLAlchemyError("db failure")
+
+    with pytest.raises(DatabaseException) as exc_info:
+        repository.upsert_address(address_info, commit_flag=True)
+
+    mock_session.rollback.assert_called_once()
+    assert "error adding address details" in str(exc_info.value).lower()
