@@ -1,17 +1,91 @@
-{
-  "assignmentId": 12345,
-  "formType": "PATENT",
-  "conveyingParties": [
-    {
-      "conveying_type": "ENTITY",
-      "citizenship": "US",
-      "citizenship_state": "CA",
-      "citizenship_state_id": 5,
-      "is_merged_entity": false,
-      "entity": {
-        "legal_entity_type_id": 10,
-        "entity_name": "ABC Corp"
-      }
-    }
-  ]
-}
+import json
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+
+class TestValidateTrademarkPropertiesRoute:
+
+    @patch("tests.routes.assignments.trademark_properties_route_test.response_constants")
+    @patch("src.routes.assignments.trademark_properties_route.TrademarkPropertiesService")
+    def test_validate_trademark_properties_success(
+        self,
+        mock_service_cls,
+        mock_response_constants,
+        mock_client,
+    ):
+        payload = {
+            "assignmentId": 16592,
+            "searchBy": "serialNumber",
+            "searchList": ["74195633", "74195634"],
+        }
+
+        mock_service = mock_service_cls.return_value
+        mock_service.validate_trademark_properties.return_value = True
+
+        mock_response_constants.VALIDATE_TRADEMARK_PROPERTIES_SUCCESS = b"success"
+
+        response = mock_client.post(
+            "/assignment/validate/trademark_properties",
+            json=payload,
+        )
+
+        assert response.status_code == 200
+        assert response.headers["Content-Type"].startswith("application/json")
+        assert response.data == mock_response_constants.VALIDATE_TRADEMARK_PROPERTIES_SUCCESS
+
+    @patch("tests.routes.assignments.trademark_properties_route_test.response_constants")
+    @patch("src.routes.assignments.trademark_properties_route.TrademarkPropertiesService")
+    def test_validate_trademark_properties_no_data(
+        self,
+        mock_service_cls,
+        mock_response_constants,
+        mock_client,
+    ):
+        payload = {
+            "assignmentId": 16592,
+            "searchBy": "serialNumber",
+            "searchList": ["", ""],
+        }
+
+        mock_service = mock_service_cls.return_value
+        mock_service.validate_trademark_properties.return_value = False
+
+        mock_response_constants.VALIDATE_TRADEMARK_PROPERTIES_ERROR = b"error"
+
+        response = mock_client.post(
+            "/assignment/validate/trademark_properties",
+            json=payload,
+        )
+
+        assert response.status_code == 500
+        assert response.headers["Content-Type"].startswith("application/json")
+        assert response.data == mock_response_constants.VALIDATE_TRADEMARK_PROPERTIES_ERROR
+
+    @patch("tests.routes.assignments.trademark_properties_route_test.response_constants")
+    @patch("src.routes.assignments.trademark_properties_route.TrademarkPropertiesService")
+    def test_validate_trademark_properties_exception(
+        self,
+        mock_service_cls,
+        mock_response_constants,
+        mock_client,
+    ):
+        payload = {
+            "assignmentId": 16592,
+            "searchBy": "serialNumber",
+            "searchList": ["74195633", "74195634"],
+        }
+
+        mock_service = mock_service_cls.return_value
+        mock_service.validate_trademark_properties.side_effect = Exception("boom")
+
+        mock_response_constants.VALIDATE_TRADEMARK_PROPERTIES_ERROR = b"error"
+
+        response = mock_client.post(
+            "/assignment/validate/trademark_properties",
+            json=payload,
+        )
+
+        assert response.status_code == 500
+        assert response.headers["Content-Type"].startswith("application/json")
+        assert response.data == mock_response_constants.VALIDATE_TRADEMARK_PROPERTIES_ERROR
