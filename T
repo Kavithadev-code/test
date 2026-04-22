@@ -1,1 +1,83 @@
-GET http://127.0.0.1:8081/ipas/api/v2/public/search/public/patent?applicationNumber=10828590
+def transform_properties_to_app_numbers(parsed_data: list) -> list:
+    """
+    Replace properties array with list of applicationNumbers.
+    Keeps rest of the structure unchanged.
+    """
+
+    for item in parsed_data:
+        properties = item.get("properties", [])
+
+        item["properties"] = [
+            prop.get("applicationNumber")
+            for prop in properties
+            if prop and prop.get("applicationNumber")
+        ]
+
+    return parsed_data
+
+
+
+
+
+
+def search_patent_by_reel_frame(
+    reel_number: int,
+    frame_number: int,
+    current_page: int = 1,
+    rows_per_page: int = 10
+):
+    try:
+        logger.info("search_patent_by_reel_frame: Received request")
+
+        # Build query
+        query = public_patent_queries.get_query_public_patent_search_by_reel_frame(
+            reel_number,
+            frame_number
+        )
+
+        # Run OpenSearch query
+        result = run_query(query=query, search_type="patent")
+
+        total_hits = result.get("hits", {}).get("total", {}).get("value", 0)
+        has_backend_pagination = total_hits > config.rows_to_be_avoided_for_pagination
+
+        # No pagination case
+        if not has_backend_pagination:
+            parsed_data = search_public_patent_data(result, {})
+
+            # 🔥 Transform only properties
+            parsed_data = transform_properties_to_app_numbers(parsed_data)
+
+            return create_search_success_response(
+                parsed_data,
+                total_hits,
+                has_backend_pagination
+            )
+
+        # Pagination case
+        paged_result = get_paginated_query_results(
+            query,
+            current_page,
+            rows_per_page
+        )
+
+        message = paged_result.get("_meta", {}).get("message")
+        capped_total = paged_result.get("_meta", {}).get("capped_total")
+
+        parsed_data = search_public_patent_data(paged_result, {})
+
+        # 🔥 Transform only properties
+        parsed_data = transform_properties_to_app_numbers(parsed_data)
+
+        return create_search_success_response(
+            parsed_data,
+            capped_total,
+            has_backend_pagination,
+            filtered_hits=0,
+            message=message
+        )
+
+    except Exception as err:
+        logger.exception("search_patent_by_reel_frame failed")
+        return create_internal_server_error_response(err)
+
