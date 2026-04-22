@@ -1,31 +1,52 @@
-def get_query_assignment_search_reel_frame(reel_number, frame_number):
-    return {
+def get_query_public_patent_search_by_reel_frame(reel_number, frame_number):
+    query = {
         "query": {
             "bool": {
                 "must": [
-                    {"term": {"reel_number": reel_number}},
-                    {"term": {"frame_number": frame_number}},
-                    {"term": {"delete_status_indicator": False}}
+                    {
+                        "nested": {
+                            "path": "public_patent_properties",
+                            "query": {
+                                "bool": {
+                                    "must": [
+                                        {
+                                            "term": {
+                                                "public_patent_properties.reel_number": reel_number
+                                            }
+                                        },
+                                        {
+                                            "term": {
+                                                "public_patent_properties.frame_number": frame_number
+                                            }
+                                        }
+                                    ]
+                                }
+                            },
+                            "inner_hits": {}
+                        }
+                    },
+                    {
+                        "match": {
+                            "delete_status_indicator": False
+                        }
+                    }
+                ],
+                "filter": [
+                    {
+                        "range": {
+                            "public_property_count": {
+                                "gte": 1
+                            }
+                        }
+                    }
                 ]
             }
         },
         "from": 0,
-        "size": 10,
+        "size": config_rows_to_be_avoided_for_pagination,
         "_source": {
-            "includes": [
-                "reel_number",
-                "frame_number",
-                "conveyance_type_text",
-                "conveyance_type_code",
-                "correspondent",
-                "assignor",
-                "assignee",
-                "processing_details",
-                "mail_date",
-                "receipt_date",
-                "recordation_date",
-                "page_count",
-                "image_available_status_code"
-            ]
+            "includes": ["*"],
+            "excludes": ["private_patent_properties", "private_property_count"]
         }
     }
+    return query
