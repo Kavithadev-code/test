@@ -1,38 +1,19 @@
-def get_assignment_details_patent(reel_number, frame_number, current_page=1, rows_per_page=10):
-    try:
-        logger.info("search_public_patent_assignment_details: Received request")
+from fastapi import APIRouter, Query
+from app.service.patent import search_public_patent
 
-        query = public_patent_queries.get_query_public_patent_search_by_reel_frame(
-            reel_number, frame_number
-        )
+public_router = APIRouter()
 
-        result = run_query(query=query, search_type="patent")
 
-        total_hits = result.get("hits", {}).get("total", {}).get("value", 0)
-        has_backend_pagination = total_hits > config.rows_to_be_avoided_for_pagination
-
-        if not has_backend_pagination:
-            parsed_data = search_public_patent_data(result, {})
-            return create_search_success_response(
-                parsed_data,
-                total_hits,
-                has_backend_pagination
-            )
-
-        paged_result = get_paginated_query_results(query, current_page, rows_per_page)
-        message = paged_result.get("_meta", {}).get("message")
-        capped_total = paged_result.get("_meta", {}).get("capped_total")
-
-        parsed_paged_data = search_public_patent_data(paged_result, {})
-
-        return create_search_success_response(
-            parsed_paged_data,
-            capped_total,
-            has_backend_pagination,
-            filtered_hits=0,
-            message=message
-        )
-
-    except Exception as err:
-        logger.exception("search_public_patent_assignment_details failed")
-        return create_internal_server_error_response(err)
+@public_router.get("/search/public/patent/reel-frame")
+async def search_patent_by_reel_frame(
+    reel_number: int = Query(..., alias="reelNumber"),
+    frame_number: int = Query(..., alias="frameNumber"),
+    current_page: int = Query(1, alias="currentPage"),
+    records_per_page: int = Query(25, alias="recordsPerPage", ge=1, le=100),
+):
+    return search_public_patent.get_assignment_details_patent(
+        reel_number=reel_number,
+        frame_number=frame_number,
+        current_page=current_page,
+        rows_per_page=records_per_page,
+    )
