@@ -1,1 +1,19 @@
-http://127.0.0.1:8081/ipas/api/v2/public/search/public/patent/reel-frame?reelNumber=16430&frameNumber=948&currentPage=1&recordsPerPage=25
+from fastapi import APIRouter, Query
+from app.service.patent import search_public_patent
+
+public_router = APIRouter()
+
+
+@public_router.get("/search/public/patent/reel-frame")
+async def search_patent_by_reel_frame(
+    reelNumber: int = Query(...),
+    frameNumber: int = Query(...),
+    currentPage: int = Query(1),
+    recordsPerPage: int = Query(25, ge=1, le=100),
+):
+    return search_public_patent.get_assignment_details_patent(
+        reel_number=reelNumber,
+        frame_number=frameNumber,
+        current_page=currentPage,
+        rows_per_page=recordsPerPage,
+    )
