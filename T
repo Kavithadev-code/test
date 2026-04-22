@@ -2,7 +2,7 @@ def get_assignment_details_patent(reel_number, frame_number, current_page=1, row
     try:
         logger.info("search_public_patent_assignment_details: Received request")
 
-        query = public_patent_queries.get_query_public_patent_search_single_reel_frame_number(
+        query = public_patent_queries.get_query_public_patent_search_by_reel_frame(
             reel_number, frame_number
         )
 
@@ -13,18 +13,17 @@ def get_assignment_details_patent(reel_number, frame_number, current_page=1, row
 
         if not has_backend_pagination:
             return create_search_success_response(
-                search_public_patent_data(result),   # ✅ FIXED
+                search_public_patent_data(result, {}),
                 total_hits,
                 has_backend_pagination
             )
 
         paged_result = get_paginated_query_results(query, current_page, rows_per_page)
-
         message = paged_result.get("_meta", {}).get("message")
         capped_total = paged_result.get("_meta", {}).get("capped_total")
 
         return create_search_success_response(
-            search_public_patent_data(paged_result),  # ✅ FIXED
+            search_public_patent_data(paged_result, {}),
             capped_total,
             has_backend_pagination,
             filtered_hits=0,
