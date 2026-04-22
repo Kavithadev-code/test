@@ -1,22 +1,12 @@
-def transform_properties_to_app_numbers(parsed_data):
+def transform_properties_to_app_numbers(response: dict) -> dict:
     """
-    Safely replace properties with applicationNumber list.
+    Replace properties with list of applicationNumbers inside response['data']
     """
 
-    if not isinstance(parsed_data, list):
-        return parsed_data
+    data = response.get("data", [])
 
-    for item in parsed_data:
-
-        # Skip if not dict (this is your current failure)
-        if not isinstance(item, dict):
-            continue
-
+    for item in data:
         properties = item.get("properties", [])
-
-        # Ensure properties is a list
-        if not isinstance(properties, list):
-            continue
 
         item["properties"] = [
             prop.get("applicationNumber")
@@ -24,4 +14,4 @@ def transform_properties_to_app_numbers(parsed_data):
             if isinstance(prop, dict) and prop.get("applicationNumber")
         ]
 
-    return parsed_data
+    return response
