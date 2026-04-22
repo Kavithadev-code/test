@@ -16,4 +16,13 @@ async def search_patent_by_reel_frame(
         frame_number=frameNumber,
         current_page=currentPage,
         rows_per_page=recordsPerPage,
+
+
+
+
+
+
+
+
+http://127.0.0.1:8081/ipas/api/v2/public/search/public/patent/reel-frame?reelNumber=16430&frameNumber=948
     )
