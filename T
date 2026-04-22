@@ -1,17 +1,22 @@
 def transform_properties_to_app_numbers(response: dict) -> dict:
     """
-    Replace properties with list of applicationNumbers inside response['data']
+    Replace response['data']['properties'] with only applicationNumber values.
+    Keep everything else unchanged.
     """
+    data = response.get("data", {})
 
-    data = response.get("data", [])
+    if not isinstance(data, dict):
+        return response
 
-    for item in data:
-        properties = item.get("properties", [])
+    properties = data.get("properties", [])
 
-        item["properties"] = [
-            prop.get("applicationNumber")
-            for prop in properties
-            if isinstance(prop, dict) and prop.get("applicationNumber")
-        ]
+    if not isinstance(properties, list):
+        return response
+
+    data["properties"] = [
+        prop.get("applicationNumber")
+        for prop in properties
+        if isinstance(prop, dict) and prop.get("applicationNumber")
+    ]
 
     return response
