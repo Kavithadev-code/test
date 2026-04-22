@@ -7,22 +7,24 @@ def get_assignment_details_patent(reel_number, frame_number, current_page=1, row
         )
 
         result = run_query(query=query, search_type="patent")
+
         total_hits = result["hits"]["total"]["value"]
         has_backend_pagination = total_hits > config.rows_to_be_avoided_for_pagination
 
         if not has_backend_pagination:
             return create_search_success_response(
-                search_public_patent_data(result.request_data),
+                search_public_patent_data(result),   # ✅ FIXED
                 total_hits,
                 has_backend_pagination
             )
 
         paged_result = get_paginated_query_results(query, current_page, rows_per_page)
+
         message = paged_result.get("_meta", {}).get("message")
         capped_total = paged_result.get("_meta", {}).get("capped_total")
 
         return create_search_success_response(
-            search_public_patent_data(paged_result.request_data),
+            search_public_patent_data(paged_result),  # ✅ FIXED
             capped_total,
             has_backend_pagination,
             filtered_hits=0,
