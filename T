@@ -1,4 +1,4 @@
-def get_query_public_patent_search_by_reel_frame(reel_number, frame_number):
+def get_query_public_patent_search_single_reel_frame_number(reel_number, frame_number):
     query = {
         "query": {
             "bool": {
@@ -22,11 +22,21 @@ def get_query_public_patent_search_by_reel_frame(reel_number, frame_number):
                                     ]
                                 }
                             },
-                            "inner_hits": {}
+                            "inner_hits": {
+                                "_source": {
+                                    "includes": [
+                                        "public_patent_properties.reel_number",
+                                        "public_patent_properties.frame_number",
+                                        "public_patent_properties.assignor",
+                                        "public_patent_properties.assignee",
+                                        "public_patent_properties.correspondent"
+                                    ]
+                                }
+                            }
                         }
                     },
                     {
-                        "match": {
+                        "term": {
                             "delete_status_indicator": False
                         }
                     }
