@@ -19,4 +19,4 @@ def transform_properties_to_app_numbers(response: dict) -> dict:
         if isinstance(prop, dict) and prop.get("applicationNumber")
     ]
 
-    return response
+    return respect 
