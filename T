@@ -1,20 +1,17 @@
-lookup = {
-    str(p.get("application_number")): {
-        "sequence_number": p.get("property_sequence_number"),
-        "property_id": p.get("property_id")
-    }
-    for p in all_properties
-    if p.get("application_number")
-}
+from datetime import date, datetime
 
-for fp in filtered_properties:
-    app_num = fp.get("applicationNumberText")
+def get_date_mm_dd_yyyy(value):
+    if not value:
+        return ""
 
-    if not app_num:
-        continue
+    value = str(value).strip()
 
-    data = lookup.get(str(app_num))
+    # timestamp like 348814800
+    if value.isdigit() and len(value) > 8:
+        value = date.fromtimestamp(float(value)).strftime("%Y%m%d")
 
-    if data:
-        fp["sequence_number"] = data.get("sequence_number")
-        fp["property_id"] = data.get("property_id")
+    # YYYYMMDD only
+    if value.isdigit() and len(value) == 8:
+        return datetime.strptime(value, "%Y%m%d").date().strftime(config.date_mm_dd_yyyy)
+
+    return ""
