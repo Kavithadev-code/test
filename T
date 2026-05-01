@@ -1,12 +1,12 @@
-POST ac-history-patent-v2-blue/_search
-{
-  "size": 10,
-  "query": {
-    "script": {
-      "script": {
-        "lang": "painless",
-        "source": "return doc['patent_properties.application_number'].size() > 1;"
-      }
-    }
-  }
-}
+seq_map = {}
+
+for p in all_properties:
+    app = p.get("application_number")
+    seq = p.get("property_sequence_number")
+    if app:
+        seq_map[str(app)] = seq
+
+for fp in filtered_properties:
+    app_num = fp.get("applicationNumberText")
+    if app_num:
+        fp["sequence_number"] = seq_map.get(str(app_num))
