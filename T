@@ -5,19 +5,7 @@ POST ac-history-patent-v2-blue/_search
     "script": {
       "script": {
         "lang": "painless",
-        "source": """
-          if (!params._source.containsKey('patent_properties')) return false;
-          if (params._source.patent_properties == null) return false;
-
-          int count = 0;
-          for (p in params._source.patent_properties) {
-            if (p.containsKey('application_number') && p.application_number != null) {
-              count++;
-            }
-          }
-
-          return count > 1;
-        """
+        "source": "return doc['patent_properties.application_number'].size() > 1;"
       }
     }
   }
