@@ -1,9 +1,23 @@
+POST ac-history-patent-v2-blue/_search
 {
+  "size": 10,
   "query": {
     "script": {
       "script": {
-        "source": "if (!params._source.containsKey('patent_properties') || params._source.patent_properties == null) return false; int count = 0; for (p in params._source.patent_properties) { if (p.containsKey('application_number') && p.application_number != null) count++; } return count > 1;",
-        "lang": "painless"
+        "lang": "painless",
+        "source": """
+          if (!params._source.containsKey('patent_properties')) return false;
+          if (params._source.patent_properties == null) return false;
+
+          int count = 0;
+          for (p in params._source.patent_properties) {
+            if (p.containsKey('application_number') && p.application_number != null) {
+              count++;
+            }
+          }
+
+          return count > 1;
+        """
       }
     }
   }
