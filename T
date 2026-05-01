@@ -1,22 +1,10 @@
-def transform_properties_to_app_numbers(response: dict) -> dict:
-    """
-    Replace response['data']['properties'] with only applicationNumber values.
-    Keep everything else unchanged.
-    """
-    data = response.get("data", {})
-
-    if not isinstance(data, dict):
-        return response
-
-    properties = data.get("properties", [])
-
-    if not isinstance(properties, list):
-        return response
-
-    data["properties"] = [
-        prop.get("applicationNumber")
-        for prop in properties
-        if isinstance(prop, dict) and prop.get("applicationNumber")
-    ]
-
-    return respect 
+{
+  "query": {
+    "script": {
+      "script": {
+        "source": "if (!params._source.containsKey('patent_properties') || params._source.patent_properties == null) return false; int count = 0; for (p in params._source.patent_properties) { if (p.containsKey('application_number') && p.application_number != null) count++; } return count > 1;",
+        "lang": "painless"
+      }
+    }
+  }
+}
