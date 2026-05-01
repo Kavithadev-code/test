@@ -1,12 +1,20 @@
-seq_map = {}
+lookup = {}
 
 for p in all_properties:
     app = p.get("application_number")
-    seq = p.get("property_sequence_number")
-    if app:
-        seq_map[str(app)] = seq
+    if not app:
+        continue
+
+    lookup[str(app)] = {
+        "sequence_number": p.get("property_sequence_number"),
+        "property_id": p.get("property_id")
+    }
 
 for fp in filtered_properties:
     app_num = fp.get("applicationNumberText")
-    if app_num:
-        fp["sequence_number"] = seq_map.get(str(app_num))
+    if not app_num:
+        continue
+
+    data = lookup.get(str(app_num), {})
+    fp["sequence_number"] = data.get("sequence_number")
+    fp["property_id"] = data.get("property_id")
