@@ -1,3 +1,32 @@
-filtered_properties.sort(
-    key=lambda x: x.get("sequence_number") or 0
-)
+from datetime import datetime
+
+def get_date_mm_dd_yyyy_string(value):
+    if not value:
+        return ""
+
+    try:
+        value_str = str(value).strip()
+
+        # Case 1: Pure digits (epoch or YYYYMMDD)
+        if value_str.lstrip('-').isdigit():
+
+            num = int(value_str)
+
+            # Epoch (seconds or milliseconds)
+            if len(value_str) > 8:
+                # detect milliseconds
+                if len(value_str) >= 13:
+                    num = num / 1000
+
+                dt = datetime.fromtimestamp(num)
+                return dt.strftime("%m/%d/%Y")
+
+            # YYYYMMDD
+            if len(value_str) == 8:
+                dt = datetime.strptime(value_str, "%Y%m%d")
+                return dt.strftime("%m/%d/%Y")
+
+        return ""
+
+    except Exception:
+        return ""
