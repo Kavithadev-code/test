@@ -1,32 +1,32 @@
-from datetime import datetime
+for prop in all_properties:
 
-def get_date_mm_dd_yyyy_string(value):
-    if not value:
-        return ""
+    if not isinstance(prop, dict):
+        continue
 
-    try:
-        value_str = str(value).strip()
+    property_id = prop.get("property_id")
 
-        # Case 1: Pure digits (epoch or YYYYMMDD)
-        if value_str.lstrip('-').isdigit():
+    if property_id is None:
+        continue
 
-            num = int(value_str)
+    matched = False
 
-            # Epoch (seconds or milliseconds)
-            if len(value_str) > 8:
-                # detect milliseconds
-                if len(value_str) >= 13:
-                    num = num / 1000
+    # Check existing OPSG records
+    for opsg_record in opsg_results:
 
-                dt = datetime.fromtimestamp(num)
-                return dt.strftime("%m/%d/%Y")
+        if opsg_record.get("applicationNumberText") == property_id:
 
-            # YYYYMMDD
-            if len(value_str) == 8:
-                dt = datetime.strptime(value_str, "%Y%m%d")
-                return dt.strftime("%m/%d/%Y")
+            # Update existing record
+            opsg_record["property_sequence_number"] = prop.get(
+                "property_sequence_number"
+            )
 
-        return ""
+            matched = True
+            break
 
-    except Exception:
-        return ""
+    # If no matching OPSG record found, append new one
+    if not matched:
+
+        opsg_results.append({
+            "applicationNumberText": property_id,
+            "property_sequence_number": prop.get("property_sequence_number")
+        })
