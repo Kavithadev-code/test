@@ -1,45 +1,9 @@
-opsg_results = opsg_response.get("results", [])
-
-# 1. Create lookup for property_id -> sequence_number
-sequence_lookup = {
-    prop.get("property_id"): prop.get("property_sequence_number")
-    for prop in all_properties
-    if isinstance(prop, dict) and prop.get("property_id") is not None
-}
-
-# 2. Update existing OPSG records with sequence number
-for opsg_record in opsg_results:
-    app_num = opsg_record.get("applicationNumberText")
-
-    if app_num in sequence_lookup:
-        opsg_record["property_sequence_number"] = sequence_lookup[app_num]
-
-# 3. Existing application numbers in OPSG
-existing_app_nums = {
-    record.get("applicationNumberText")
-    for record in opsg_results
-}
-
-# 4. Add missing non-null property IDs
-for property_id, sequence_number in sequence_lookup.items():
-    if property_id not in existing_app_nums:
-        opsg_results.append({
-            "applicationNumberText": property_id,
-            "property_sequence_number": sequence_number
-        })
-
-# 5. Add all records where property_id is None
-for prop in all_properties:
-    if not isinstance(prop, dict):
-        continue
-
-    if prop.get("property_id") is None:
-        opsg_results.append({
-            "applicationNumberText": None,
-            "property_sequence_number": prop.get("property_sequence_number")
-        })
-
-# 6. Sort by sequence number
-opsg_results.sort(
-    key=lambda x: x.get("property_sequence_number") or 999999
-)
+"assignors": [
+    {
+        **(a.to_dict() if hasattr(a, 'to_dict') else a),
+        "execution_date": format_date_for_ui(
+            (a.to_dict() if hasattr(a, 'to_dict') else a).get("execution_date")
+        )
+    }
+    for a in assignment.get("assignor", [])
+],
