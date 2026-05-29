@@ -1,9 +1,26 @@
-"assignors": [
-    {
-        **(a.to_dict() if hasattr(a, 'to_dict') else a),
-        "execution_date": format_date_for_ui(
-            (a.to_dict() if hasattr(a, 'to_dict') else a).get("execution_date")
-        )
-    }
-    for a in assignment.get("assignor", [])
-],
+assignors_names = []
+
+for assignor in assignors_data:
+    assignor_name = assignor.get("assignor_name", "")
+    if not assignor_name:
+        continue
+
+    if search_name:
+        search_words = search_name.lower().split()
+        assignor_name_lower = assignor_name.lower()
+
+        if all(word in assignor_name_lower for word in search_words):
+            assignors_names.append(assignor_name)
+    else:
+        assignors_names.append(assignor_name)
+
+if search_name and not assignors_names:
+    continue
+
+result = {
+    "reelNumber": reel_number,
+    "frameNumber": frame_number,
+    "assignorExecutionDate": formatted_execution_date,
+    "conveyance": conveyance_type_text,
+    "assignors": ", ".join(assignors_names)
+}
