@@ -1,26 +1,28 @@
-assignors_names = []
-
-for assignor in assignors_data:
-    assignor_name = assignor.get("assignor_name", "")
-    if not assignor_name:
-        continue
-
-    if search_name:
-        search_words = search_name.lower().split()
-        assignor_name_lower = assignor_name.lower()
-
-        if all(word in assignor_name_lower for word in search_words):
-            assignors_names.append(assignor_name)
-    else:
-        assignors_names.append(assignor_name)
-
-if search_name and not assignors_names:
-    continue
-
-result = {
-    "reelNumber": reel_number,
-    "frameNumber": frame_number,
-    "assignorExecutionDate": formatted_execution_date,
-    "conveyance": conveyance_type_text,
-    "assignors": ", ".join(assignors_names)
+query = {
+    "query": {
+        "bool": {
+            "must": [
+                {"term": {"reel_number": reel_number_stripped}},
+                {"term": {"frame_number": frame_number_stripped}},
+                {"term": {"delete_status_indicator": False}},
+                {
+                    "nested": {
+                        "path": "patent_properties",
+                        "query": {
+                            "terms": {
+                                "patent_properties.property_id_type": [
+                                    "APPLICATION_NUMBER",
+                                    "PCT_NUMBER",
+                                    "PCT_NUMBER_17"
+                                ]
+                            }
+                        }
+                    }
+                }
+            ],
+            "filter": [
+                {"range": {"property_count": {"gte": 1}}}
+            ]
+        }
+    }
 }
